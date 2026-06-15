@@ -145,7 +145,18 @@ const api = {
   system: {
     copyText: (text: string): Promise<boolean> => ipcRenderer.invoke('system:copyText', text),
     revealPath: (p: string): Promise<void> => ipcRenderer.invoke('system:revealPath', p),
-    openPath: (p: string): Promise<string> => ipcRenderer.invoke('system:openPath', p)
+    openPath: (p: string): Promise<string> => ipcRenderer.invoke('system:openPath', p),
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('system:openExternal', url)
+  },
+  app: {
+    checkUpdate: (): Promise<{
+      current: string
+      latest: string
+      needUpdate: boolean
+      notes: string
+      forceUpdate: boolean
+      url: string
+    }> => ipcRenderer.invoke('app:checkUpdate')
   }
 }
 

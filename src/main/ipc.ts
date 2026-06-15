@@ -322,6 +322,35 @@ export function registerIpc(): void {
   ipcMain.handle('ws:payCreate', (_e, tier: string) => account.payCreate(tier))
   ipcMain.handle('ws:payStatus', (_e, outTradeNo: string) => account.payStatus(outTradeNo))
   ipcMain.handle('app:version', () => account.appVersion())
+  // 启动版本检测：后端最新版本号与本机版本比对，不是最新则提示去官网更新
+  ipcMain.handle('app:checkUpdate', async () => {
+    const current = app.getVersion()
+    const url = `${account.API_BASE}/wenshu/download`
+    const newer = (a: string, b: string): boolean => {
+      const pa = String(a).split('.').map((n) => parseInt(n, 10) || 0)
+      const pb = String(b).split('.').map((n) => parseInt(n, 10) || 0)
+      for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const x = pa[i] || 0
+        const y = pb[i] || 0
+        if (x !== y) return x > y
+      }
+      return false
+    }
+    try {
+      const r = await account.appVersion()
+      const latest = (r.data?.version as string) || current
+      return {
+        current,
+        latest,
+        needUpdate: newer(latest, current),
+        notes: (r.data?.notes as string) || '',
+        forceUpdate: !!r.data?.forceUpdate,
+        url
+      }
+    } catch {
+      return { current, latest: current, needUpdate: false, notes: '', forceUpdate: false, url }
+    }
+  })
 
   // ---- 对话式智能体 ----
   ipcMain.handle('agent:send', async (e, input: AgentSendInput): Promise<AgentSendResult> => {
@@ -387,4 +416,8 @@ export function registerIpc(): void {
     shell.showItemInFolder(p)
   })
   ipcMain.handle('system:openPath', (_e, p: string) => shell.openPath(p))
+  // 在系统默认浏览器打开外部网址（用于「去官网更新」）
+  ipcMain.handle('system:openExternal', (_e, url: string) => {
+    if (typeof url === 'string' && /^https?:\/\//.test(url)) void shell.openExternal(url)
+  })
 }

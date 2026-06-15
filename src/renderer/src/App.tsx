@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bot, Boxes, BrainCircuit, FileStack, Library, Loader2, UserCircle2 } from 'lucide-react'
+import { Bot, Boxes, BrainCircuit, FileStack, Library, Loader2, UserCircle2, X } from 'lucide-react'
 import type { AuthState } from '@shared/types'
 import Toaster from './components/Toast'
 import LoginView from './views/LoginView'
@@ -39,12 +39,39 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<ViewId>('chat')
   const [auth, setAuth] = useState<AuthState | null>(null)
 
+  const [update, setUpdate] = useState<{ latest: string; notes: string; url: string } | null>(null)
+
   async function refreshAuth(): Promise<void> {
     setAuth(await window.api.auth.status())
   }
   useEffect(() => {
     void refreshAuth()
+    // 启动版本检测：不是最新版则提示去官网更新
+    void window.api.app
+      .checkUpdate()
+      .then((u) => {
+        if (u?.needUpdate) setUpdate({ latest: u.latest, notes: u.notes, url: u.url })
+      })
+      .catch(() => {})
   }, [])
+
+  const updateBanner = update ? (
+    <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 bg-brand px-4 py-2 text-xs text-white shadow-md">
+      <span>
+        发现新版本 <b>v{update.latest}</b>，建议更新以获得最新功能与修复
+        {update.notes ? `（${update.notes}）` : ''}。
+      </span>
+      <button
+        onClick={() => void window.api.system.openExternal(update.url)}
+        className="rounded-full bg-white/20 px-3 py-0.5 font-medium hover:bg-white/30"
+      >
+        去官网更新
+      </button>
+      <button onClick={() => setUpdate(null)} className="text-white/80 hover:text-white" title="稍后">
+        <X size={14} />
+      </button>
+    </div>
+  ) : null
 
   if (auth === null) {
     return (
@@ -56,6 +83,7 @@ export default function App(): JSX.Element {
   if (!auth.loggedIn) {
     return (
       <>
+        {updateBanner}
         <LoginView onDone={refreshAuth} />
         <Toaster />
       </>
@@ -64,6 +92,7 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-full bg-ink text-slate-700">
+      {updateBanner}
       {/* 侧边栏 */}
       <aside className="flex w-52 shrink-0 flex-col border-r border-edge bg-panel/60">
         <div className="flex items-center gap-2 px-5 py-5">
