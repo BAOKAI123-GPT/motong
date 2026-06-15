@@ -1,0 +1,27 @@
+name: build-mac
+
+# 在 macOS runner 上构建未签名的 macOS 版（Apple 芯片 + Intel），并发布到 v${version} 的 Release。
+# 手动触发：仓库 Actions 页面点 "Run workflow"，或由 API dispatch。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+      - name: Build renderer/main
+        run: npx electron-vite build
+      - name: Package + publish macOS dmg (arm64 + x64)
+        run: npx electron-builder --mac --arm64 --x64 --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'

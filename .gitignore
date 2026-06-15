@@ -1,0 +1,13 @@
+node_modules
+out
+dist
+*.log
+.DS_Store
+
+verify/*.cjs
+
+# 内置 LibreOffice 便携版（约 1.5G，仅 Windows 本地打包用，不进 git）
+resources/libreoffice/
+.env
+.env.*
+*.pem

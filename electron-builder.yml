@@ -1,0 +1,47 @@
+appId: com.hanwen.app
+productName: 翰文
+directories:
+  buildResources: build
+  output: dist
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!verify/*'
+  - '!scripts/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintrc.cjs,.prettierrc,.prettierignore}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tailwind.config.js,postcss.config.js}'
+publish:
+  provider: github
+  owner: BAOKAI123-GPT
+  repo: hanwen
+win:
+  target:
+    - nsis
+    - portable
+  # 仅 Windows 打包内置 LibreOffice 便携版（开箱即用，约 1.5G）
+  extraResources:
+    - from: resources/libreoffice
+      to: libreoffice
+      filter:
+        - '**/*'
+  artifactName: Hanwen-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  artifactName: Hanwen-Setup-${version}.${ext}
+portable:
+  artifactName: Hanwen-Portable-${version}.${ext}
+mac:
+  target:
+    - dmg
+  category: public.app-category.productivity
+  # 未签名分发：跳过签名/公证；Mac 用户首次打开需右键「打开」绕过 Gatekeeper
+  identity: null
+  artifactName: Hanwen-${version}-${arch}.${ext}
+dmg:
+  artifactName: Hanwen-${version}-${arch}.${ext}
