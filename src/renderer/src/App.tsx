@@ -100,9 +100,11 @@ export default function App(): JSX.Element {
         </div>
       </aside>
 
-      {/* 主区域：对话页自管滚动，其它页随内容滚动 */}
+      {/* 主区域：对话页常驻不卸载（切到别的页再切回来，已输入文字/正在生成的内容不丢失），其它页随内容滚动 */}
       <main className="flex-1 overflow-y-auto">
-        {view === 'chat' && <ChatView onOpen={setView} onAuthExpired={refreshAuth} />}
+        <div className={view === 'chat' ? 'h-full' : 'hidden'}>
+          <ChatView onOpen={setView} onAuthExpired={refreshAuth} />
+        </div>
         {view === 'convert' && <ConvertView handoff={null} clearHandoff={() => {}} />}
         {view === 'split' && <SplitView handoff={null} clearHandoff={() => {}} />}
         {view === 'pdftools' && <PdfToolsView />}
