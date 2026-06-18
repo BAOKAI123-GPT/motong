@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
+  --grad: linear-gradient(135deg, #f8e3a0 0%, #e3c06a 45%, #b8860b 100%);
 }
 
 html,
@@ -16,8 +17,8 @@ body,
 body {
   font-family:
     'Microsoft YaHei', 'PingFang SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: #ffffff;
-  color: #1f2430;
+  background: #0b0a07;
+  color: #f2ead7;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -28,13 +29,22 @@ textarea {
   user-select: text;
 }
 
+/* 金色渐变主按钮（bg-brand 实色按钮自动升级为金渐变 + 深字） */
+.bg-brand {
+  background-image: var(--grad);
+  color: #2a1d05;
+}
+
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d0d0d6;
+  background: #3a3320;
   border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5c5030;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
