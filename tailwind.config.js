@@ -4,12 +4,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        ink: '#ffffff', // 主背景：白
-        panel: '#f6f6f8', // 卡片/面板：极浅灰
-        edge: '#e7e7ea', // 边框：浅灰
-        muted: '#6b7280', // 次要文字：中灰
-        brand: '#e11d2a', // 主色：红
-        brand2: '#0e9f6e' // 成功/下载：绿（点缀）
+        ink: '#f4ecdb', // 主背景：宣纸米
+        panel: '#fffdf7', // 卡片/面板：暖白
+        edge: '#e0d4ba', // 边框：暖浅
+        muted: '#7a6e58', // 次要文字：暖灰
+        brand: '#b1342a', // 主色：朱砂红
+        brand2: '#3a6b5e' // 成功/下载：竹青（点缀）
       }
     }
   },

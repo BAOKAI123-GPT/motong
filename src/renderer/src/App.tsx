@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bot, Boxes, BrainCircuit, FileStack, Library, Loader2, UserCircle2, X } from 'lucide-react'
+import { Bot, Boxes, BrainCircuit, Library, Loader2, UserCircle2, X } from 'lucide-react'
 import type { AuthState } from '@shared/types'
 import Toaster from './components/Toast'
 import LoginView from './views/LoginView'
@@ -13,6 +13,7 @@ import InfoLibraryView from './views/InfoLibraryView'
 import MemoryView from './views/MemoryView'
 import AccountView from './views/AccountView'
 import SettingsView from './views/SettingsView'
+import motongLogo from './assets/motong.png'
 
 export type ViewId =
   | 'chat'
@@ -96,12 +97,10 @@ export default function App(): JSX.Element {
       {/* 侧边栏 */}
       <aside className="flex w-52 shrink-0 flex-col border-r border-edge bg-panel/60">
         <div className="flex items-center gap-2 px-5 py-5">
-          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand/20 text-brand">
-            <FileStack size={20} />
-          </div>
+          <img src={motongLogo} alt="墨童" className="h-9 w-9 rounded-lg object-cover ring-1 ring-brand/40" />
           <div>
-            <div className="text-sm font-semibold leading-tight">翰文</div>
-            <div className="text-[11px] text-muted">对话式文书办公</div>
+            <div className="text-sm font-semibold leading-tight">墨童</div>
+            <div className="text-[11px] text-muted">AI 文员 · 承子夏文脉</div>
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 px-3">

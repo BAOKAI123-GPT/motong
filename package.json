@@ -1,7 +1,7 @@
 {
-  "name": "wenshu-assist",
-  "version": "0.5.1",
-  "description": "政企文书智能处理助手 — 对话式办公：发需求/聊天记录/表格，AI 自动建表、套模板、转格式并回传文件",
+  "name": "motong",
+  "version": "0.6.0",
+  "description": "墨童 · AI 文员 — 承子夏文脉的对话式文书办公：发需求/聊天记录/表格，AI 自动建表、套模板、转格式并回传文件",
   "main": "./out/main/index.js",
   "author": "WenshuAssist",
   "license": "MIT",

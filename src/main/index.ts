@@ -11,8 +11,8 @@ function createWindow(): void {
     minHeight: 660,
     show: false,
     autoHideMenuBar: true,
-    title: '翰文',
-    backgroundColor: '#ffffff',
+    title: '墨童',
+    backgroundColor: '#f4ecdb',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -35,7 +35,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId('com.hanwen.app')
+  electronApp.setAppUserModelId('com.motong.app')
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

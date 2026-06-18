@@ -1,5 +1,5 @@
-appId: com.hanwen.app
-productName: 翰文
+appId: com.motong.app
+productName: 墨童
 directories:
   buildResources: build
   output: dist
@@ -15,7 +15,7 @@ files:
 publish:
   provider: github
   owner: BAOKAI123-GPT
-  repo: hanwen
+  repo: motong
   # 发布到已存在的正式 Release（默认 draft 会与已发布的 v0.5.0 冲突而跳过上传）
   releaseType: release
 win:
@@ -28,22 +28,22 @@ win:
       to: libreoffice
       filter:
         - '**/*'
-  artifactName: Hanwen-Setup-${version}.${ext}
+  artifactName: Motong-Setup-${version}.${ext}
 nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false
   createDesktopShortcut: true
-  artifactName: Hanwen-Setup-${version}.${ext}
+  artifactName: Motong-Setup-${version}.${ext}
 portable:
-  artifactName: Hanwen-Portable-${version}.${ext}
+  artifactName: Motong-Portable-${version}.${ext}
 mac:
   target:
     - dmg
   category: public.app-category.productivity
   # 未签名分发：跳过签名/公证；Mac 用户首次打开需右键「打开」绕过 Gatekeeper
   identity: null
-  artifactName: Hanwen-${version}-${arch}.${ext}
+  artifactName: Motong-${version}-${arch}.${ext}
 dmg:
-  artifactName: Hanwen-${version}-${arch}.${ext}
+  artifactName: Motong-${version}-${arch}.${ext}

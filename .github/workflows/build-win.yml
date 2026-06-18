@@ -1,0 +1,59 @@
+name: build-win
+
+# 在 Windows runner 上构建墨童 Windows 版（NSIS 安装包 + 便携版），内置 LibreOffice，发布到 Release。
+# CI 内下载官方 LibreOffice msi 并「管理员解压」(/a) 出完整目录放入 resources/libreoffice，
+# 这样无需把 1.5G LibreOffice 放进仓库。手动触发：Actions 页面 "Run workflow"。
+on:
+  workflow_dispatch:
+    inputs:
+      lo_version:
+        description: 'LibreOffice 版本 (stable)'
+        required: false
+        default: '24.8.4'
+
+permissions:
+  contents: write
+
+jobs:
+  win:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps
+        run: npm install --no-audit --no-fund
+
+      - name: Download LibreOffice (Windows x86-64)
+        shell: pwsh
+        run: |
+          $ver = "${{ github.event.inputs.lo_version }}"
+          if (-not $ver) { $ver = "24.8.4" }
+          $url = "https://download.documentfoundation.org/libreoffice/stable/$ver/win/x86_64/LibreOffice_${ver}_Win_x86-64.msi"
+          Write-Host "Downloading $url"
+          Invoke-WebRequest -Uri $url -OutFile lo.msi -UseBasicParsing
+
+      - name: Extract LibreOffice into resources/libreoffice (admin image, no install)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path lo_extract | Out-Null
+          $p = Start-Process msiexec.exe -ArgumentList "/a","`"$PWD\lo.msi`"","/qn","TARGETDIR=`"$PWD\lo_extract`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "msiexec /a failed: $($p.ExitCode)" }
+          $soffice = Get-ChildItem -Path lo_extract -Recurse -Filter soffice.exe | Select-Object -First 1
+          if (-not $soffice) { throw "soffice.exe not found after extract" }
+          $loRoot = Split-Path (Split-Path $soffice.FullName -Parent) -Parent   # 'program' 的上一级 = LibreOffice 根
+          New-Item -ItemType Directory -Force -Path resources | Out-Null
+          if (Test-Path resources/libreoffice) { Remove-Item resources/libreoffice -Recurse -Force }
+          Copy-Item -Path $loRoot -Destination resources/libreoffice -Recurse -Force
+          if (-not (Test-Path resources/libreoffice/program/soffice.exe)) { throw "bundle missing soffice.exe" }
+          Write-Host "LibreOffice ready:" (Get-Item resources/libreoffice/program/soffice.exe).FullName
+
+      - name: Build renderer/main
+        run: npx electron-vite build
+
+      - name: Package + publish Windows (NSIS + portable)
+        run: npx electron-builder --win --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
