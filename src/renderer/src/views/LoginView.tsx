@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { toast } from '../store/ui'
-import motongLogo from '../assets/motong.png'
 
 export default function LoginView({ onDone }: { onDone: () => void }): JSX.Element {
   const [phone, setPhone] = useState('')
@@ -51,7 +50,7 @@ export default function LoginView({ onDone }: { onDone: () => void }): JSX.Eleme
     <div className="grid h-full place-items-center bg-ink px-6">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center gap-2">
-          <img src={motongLogo} alt="墨童" className="h-14 w-14 rounded-2xl object-cover ring-1 ring-brand/40" />
+          <div className="grid h-14 w-14 place-items-center rounded-2xl bg-brand text-3xl font-black text-[#3a2a05]">墨</div>
           <div className="text-xl font-semibold">墨童</div>
           <div className="text-sm text-muted">AI 文员 · 承子夏文脉 · 手机号登录</div>
         </div>

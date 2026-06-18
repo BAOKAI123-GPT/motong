@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
-  --grad: linear-gradient(135deg, #f8e3a0 0%, #e3c06a 45%, #b8860b 100%);
+  color-scheme: light;
+  --grad: linear-gradient(135deg, #f7eccf 0%, #e6cd8c 45%, #c9a227 100%);
 }
 
 html,
@@ -17,8 +17,8 @@ body,
 body {
   font-family:
     'Microsoft YaHei', 'PingFang SC', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: #0b0a07;
-  color: #f2ead7;
+  background: #fbf8f1;
+  color: #2a2620;
   -webkit-user-select: none;
   user-select: none;
 }
@@ -29,10 +29,10 @@ textarea {
   user-select: text;
 }
 
-/* 金色渐变主按钮（bg-brand 实色按钮自动升级为金渐变 + 深字） */
+/* 金色渐变主按钮（bg-brand 实色按钮升级为白金渐变 + 深字） */
 .bg-brand {
   background-image: var(--grad);
-  color: #2a1d05;
+  color: #3a2a05;
 }
 
 ::-webkit-scrollbar {
@@ -40,11 +40,11 @@ textarea {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #3a3320;
+  background: #e0d3b3;
   border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #5c5030;
+  background: #cbb98a;
 }
 ::-webkit-scrollbar-track {
   background: transparent;

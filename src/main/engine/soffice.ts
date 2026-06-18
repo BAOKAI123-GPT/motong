@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdtemp, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, basename, extname } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /**
  * 定位 LibreOffice 可执行文件。
@@ -50,19 +51,27 @@ export async function sofficeConvert(
   target: string,
   profileDir: string
 ): Promise<string> {
-  const soffice = findSoffice()
+  let soffice = findSoffice()
   if (!soffice) {
     throw new Error(
       '没有找到 LibreOffice。文档/PDF 类转换需要它，请先安装 LibreOffice（免费）后重试。'
     )
   }
+  // Windows：优先用 soffice.com（控制台版，命令行会阻塞到转换真正完成；soffice.exe 会提前返回导致取不到产出）
+  if (process.platform === 'win32' && /soffice\.exe$/i.test(soffice)) {
+    const comPath = soffice.replace(/soffice\.exe$/i, 'soffice.com')
+    if (existsSync(comPath)) soffice = comPath
+  }
   const outDir = await mkdtemp(join(tmpdir(), 'wenshu-out-'))
   const filter = LO_FILTERS[target] ?? target
+  // 用 pathToFileURL 生成合法的 file:// URI（Windows 反斜杠路径直接拼 file:// 会非法，导致 LibreOffice 起不来 → 转换失败）
+  const userInst = pathToFileURL(profileDir).href
   const args = [
     '--headless',
     '--norestore',
     '--invisible',
-    `-env:UserInstallation=file://${profileDir}`,
+    '--nologo',
+    `-env:UserInstallation=${userInst}`,
     '--convert-to',
     filter,
     '--outdir',

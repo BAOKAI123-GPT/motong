@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bot, Boxes, BrainCircuit, Library, Loader2, UserCircle2, X } from 'lucide-react'
+import { Bot, Boxes, BrainCircuit, Library, Loader2, ScrollText, UserCircle2, X } from 'lucide-react'
 import type { AuthState } from '@shared/types'
 import Toaster from './components/Toast'
 import LoginView from './views/LoginView'
@@ -13,7 +13,7 @@ import InfoLibraryView from './views/InfoLibraryView'
 import MemoryView from './views/MemoryView'
 import AccountView from './views/AccountView'
 import SettingsView from './views/SettingsView'
-import motongLogo from './assets/motong.png'
+import AboutView from './views/AboutView'
 
 export type ViewId =
   | 'chat'
@@ -26,6 +26,7 @@ export type ViewId =
   | 'memory'
   | 'account'
   | 'settings'
+  | 'about'
 
 // 侧栏核心入口；AI 模型已内置锁定。具体工具在对话里由 AI 自动调用（手动版在「资源库」）。
 const NAV: { id: ViewId; label: string; icon: typeof Bot }[] = [
@@ -33,7 +34,8 @@ const NAV: { id: ViewId; label: string; icon: typeof Bot }[] = [
   { id: 'memory', label: '记忆', icon: BrainCircuit },
   { id: 'resources', label: '资源库', icon: Boxes },
   { id: 'info', label: '信息库', icon: Library },
-  { id: 'account', label: '我的账户', icon: UserCircle2 }
+  { id: 'account', label: '我的账户', icon: UserCircle2 },
+  { id: 'about', label: '关于墨童', icon: ScrollText }
 ]
 
 export default function App(): JSX.Element {
@@ -97,7 +99,7 @@ export default function App(): JSX.Element {
       {/* 侧边栏 */}
       <aside className="flex w-52 shrink-0 flex-col border-r border-edge bg-panel/60">
         <div className="flex items-center gap-2 px-5 py-5">
-          <img src={motongLogo} alt="墨童" className="h-9 w-9 rounded-lg object-cover ring-1 ring-brand/40" />
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-lg font-black text-[#3a2a05]">墨</div>
           <div>
             <div className="text-sm font-semibold leading-tight">墨童</div>
             <div className="text-[11px] text-muted">AI 文员 · 承子夏文脉</div>
@@ -142,6 +144,7 @@ export default function App(): JSX.Element {
         {view === 'memory' && <MemoryView />}
         {view === 'account' && <AccountView onLoggedOut={refreshAuth} />}
         {view === 'settings' && <SettingsView />}
+        {view === 'about' && <AboutView />}
       </main>
 
       <Toaster />
