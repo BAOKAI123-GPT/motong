@@ -28,6 +28,8 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
   const [pay, setPay] = useState<{ qrImg: string; outTradeNo: string; amount: string } | null>(null)
   const [busy, setBusy] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [avatar, setAvatar] = useState<string>('')
+  const avatarRef = useRef<HTMLInputElement>(null)
 
   async function loadMe(): Promise<void> {
     const r = await window.api.ws.me()
@@ -66,6 +68,33 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
   async function logout(): Promise<void> {
     await window.api.auth.logout()
     onLoggedOut()
+  }
+
+  useEffect(() => setAvatar(localStorage.getItem('motong_avatar') || ''), [])
+  function onAvatarFile(file?: File): void {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.err('请选择图片文件')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.err('图片请小于 2MB')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      const data = String(reader.result || '')
+      localStorage.setItem('motong_avatar', data)
+      setAvatar(data)
+      window.dispatchEvent(new Event('motong-avatar'))
+      toast.ok('头像已更新')
+    }
+    reader.readAsDataURL(file)
+  }
+  function removeAvatar(): void {
+    localStorage.removeItem('motong_avatar')
+    setAvatar('')
+    window.dispatchEvent(new Event('motong-avatar'))
   }
 
   const active = q?.active
@@ -112,6 +141,42 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
         {active && q!.weekTokens <= 0 && (
           <p className="mt-3 text-sm text-amber-700">本周额度已用完，下周自动恢复；急用可升级更高套餐。</p>
         )}
+      </div>
+
+      {/* 个人头像 */}
+      <div className="mt-6 rounded-2xl border border-edge bg-panel/60 p-5">
+        <div className="flex items-center gap-4">
+          {avatar ? (
+            <img src={avatar} alt="头像" className="h-16 w-16 rounded-xl object-cover" />
+          ) : (
+            <div className="grid h-16 w-16 place-items-center rounded-xl bg-black/[0.06] text-[11px] text-muted">未设置</div>
+          )}
+          <div className="flex-1">
+            <div className="text-sm font-semibold">个人头像</div>
+            <div className="text-xs text-muted">上传图片作为对话中你的头像（仅存本机，建议 ≤2MB）</div>
+          </div>
+          <button
+            onClick={() => avatarRef.current?.click()}
+            className="rounded-lg bg-brand px-3 py-1.5 text-sm text-white hover:bg-brand/90"
+          >
+            上传
+          </button>
+          {avatar && (
+            <button
+              onClick={removeAvatar}
+              className="rounded-lg border border-edge px-3 py-1.5 text-sm text-muted hover:text-red-600"
+            >
+              移除
+            </button>
+          )}
+          <input
+            ref={avatarRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => onAvatarFile(e.target.files?.[0])}
+          />
+        </div>
       </div>
 
       {/* 套餐 */}

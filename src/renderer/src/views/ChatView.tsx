@@ -20,6 +20,7 @@ import type { ViewId } from '../App'
 import { readDropped } from '../lib/files'
 import { toast } from '../store/ui'
 import { convId as newConvId, convSave, convList, convLoad, convDel, type ConvMeta } from '../lib/conversations'
+import motongFace from '../assets/motong-avatar.png'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -54,6 +55,7 @@ export default function ChatView({
   const [cid, setCid] = useState<string>(() => newConvId())
   const [convs, setConvs] = useState<ConvMeta[]>([])
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [userAvatar, setUserAvatar] = useState<string>('')
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -63,6 +65,13 @@ export default function ChatView({
     const r = await window.api.ws.me()
     if (r.ok) setQuota(r.data)
   }
+  // 用户自定义头像（在「我的账户」上传，存本地）
+  useEffect(() => {
+    const read = (): void => setUserAvatar(localStorage.getItem('motong_avatar') || '')
+    read()
+    window.addEventListener('motong-avatar', read)
+    return () => window.removeEventListener('motong-avatar', read)
+  }, [])
   useEffect(() => {
     void loadQuota()
     const off = window.api.agent.onProgress((m) => setProgress(m))
@@ -283,6 +292,7 @@ export default function ChatView({
                 onQuote={quote}
                 onRememberText={rememberText}
                 onRememberFile={rememberFile}
+                userAvatar={userAvatar}
               />
             ))}
             {busy && (
@@ -419,14 +429,14 @@ export default function ChatView({
   )
 }
 
-function Avatar({ role }: { role: 'user' | 'assistant' }): JSX.Element {
+function Avatar({ role, userAvatar }: { role: 'user' | 'assistant'; userAvatar?: string }): JSX.Element {
+  if (role === 'assistant')
+    return <img src={motongFace} alt="墨童" className="h-8 w-8 shrink-0 rounded-lg object-cover ring-1 ring-brand/30" />
+  if (userAvatar)
+    return <img src={userAvatar} alt="我" className="h-8 w-8 shrink-0 rounded-lg object-cover" />
   return (
-    <div
-      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
-        role === 'assistant' ? 'bg-brand/15 text-brand' : 'bg-black/[0.06] text-slate-600'
-      }`}
-    >
-      {role === 'assistant' ? <Bot size={17} /> : <User size={17} />}
+    <div className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-black/[0.06] text-slate-600">
+      <User size={17} />
     </div>
   )
 }
@@ -438,6 +448,7 @@ interface BubbleProps {
   onQuote: (t: string) => void
   onRememberText: (t: string) => void
   onRememberFile: (f: DroppedFile | GeneratedFilePayload) => void
+  userAvatar?: string
 }
 
 function ActionBtn({
@@ -467,12 +478,13 @@ function Bubble({
   onCopy,
   onQuote,
   onRememberText,
-  onRememberFile
+  onRememberFile,
+  userAvatar
 }: BubbleProps): JSX.Element {
   const isUser = msg.role === 'user'
   return (
     <div className={`group flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
-      <Avatar role={msg.role} />
+      <Avatar role={msg.role} userAvatar={userAvatar} />
       <div className={`max-w-[80%] ${isUser ? 'flex flex-col items-end' : ''}`}>
         {msg.content && (
           <div
