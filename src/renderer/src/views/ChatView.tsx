@@ -9,6 +9,9 @@ import {
   Quote,
   Send,
   Sparkles,
+  Plus,
+  History,
+  Trash2,
   User,
   X
 } from 'lucide-react'
@@ -16,6 +19,7 @@ import type { DroppedFile, GeneratedFilePayload, WsQuota } from '@shared/types'
 import type { ViewId } from '../App'
 import { readDropped } from '../lib/files'
 import { toast } from '../store/ui'
+import { convId as newConvId, convSave, convList, convLoad, convDel, type ConvMeta } from '../lib/conversations'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -47,6 +51,9 @@ export default function ChatView({
   const [progress, setProgress] = useState('')
   const [quota, setQuota] = useState<WsQuota | null>(null)
   const [over, setOver] = useState(false)
+  const [cid, setCid] = useState<string>(() => newConvId())
+  const [convs, setConvs] = useState<ConvMeta[]>([])
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -65,6 +72,52 @@ export default function ChatView({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' })
   }, [messages, progress, busy])
+
+  // 启动：加载历史列表，并恢复最近一条对话
+  useEffect(() => {
+    void (async () => {
+      const list = await convList()
+      setConvs(list)
+      if (list[0]) {
+        const full = await convLoad(list[0].id)
+        if (full && Array.isArray(full.messages) && full.messages.length) {
+          setMessages(full.messages as ChatMessage[])
+          setCid(full.id)
+        }
+      }
+    })()
+  }, [])
+
+  // 自动保存当前对话（标题取首条用户消息；不存上传文件的 base64，避免库膨胀）
+  useEffect(() => {
+    if (messages.length === 0) return
+    const firstUser = messages.find((m) => m.role === 'user')
+    const title = (firstUser?.content || '新对话').replace(/\n/g, ' ').slice(0, 30) || '新对话'
+    const slim = messages.map((m) => ({ ...m, attachFiles: undefined }))
+    void convSave({ id: cid, title, updatedAt: Date.now(), messages: slim }).then(refreshList)
+  }, [messages])
+
+  async function refreshList(): Promise<void> {
+    setConvs(await convList())
+  }
+  function newConversation(): void {
+    setMessages([])
+    setCid(newConvId())
+    setHistoryOpen(false)
+  }
+  async function openConversation(id: string): Promise<void> {
+    const full = await convLoad(id)
+    if (full) {
+      setMessages((full.messages as ChatMessage[]) || [])
+      setCid(id)
+    }
+    setHistoryOpen(false)
+  }
+  async function deleteConversation(id: string): Promise<void> {
+    await convDel(id)
+    await refreshList()
+    if (id === cid) newConversation()
+  }
 
   async function addFiles(list: FileList | null): Promise<void> {
     if (!list) return
@@ -150,7 +203,7 @@ export default function ChatView({
 
   return (
     <div
-      className="flex h-full flex-col"
+      className="relative flex h-full flex-col"
       onDragOver={(e) => {
         e.preventDefault()
         setOver(true)
@@ -168,6 +221,20 @@ export default function ChatView({
         <span className="text-sm font-medium">对话</span>
         <span className="text-xs text-muted">把需求、聊天记录或文件发给我，我直接给你做好文件</span>
         <div className="flex-1" />
+        <button
+          onClick={newConversation}
+          title="新建对话"
+          className="flex items-center gap-1 rounded-full border border-edge px-2.5 py-1 text-[11px] text-muted hover:border-brand/50 hover:text-brand"
+        >
+          <Plus size={13} /> 新建
+        </button>
+        <button
+          onClick={() => setHistoryOpen((v) => !v)}
+          title="历史对话"
+          className="flex items-center gap-1 rounded-full border border-edge px-2.5 py-1 text-[11px] text-muted hover:border-brand/50 hover:text-brand"
+        >
+          <History size={13} /> 历史
+        </button>
         <button
           onClick={() => onOpen('account')}
           title="查看套餐与额度"
@@ -301,6 +368,53 @@ export default function ChatView({
           />
         </div>
       </div>
+
+      {historyOpen && (
+        <>
+          <div className="absolute inset-0 z-20 bg-black/20" onClick={() => setHistoryOpen(false)} />
+          <div className="absolute left-0 top-0 z-30 flex h-full w-72 flex-col border-r border-edge bg-panel shadow-2xl">
+            <div className="flex items-center justify-between border-b border-edge px-4 py-3">
+              <span className="text-sm font-medium">历史对话</span>
+              <button onClick={() => setHistoryOpen(false)} className="text-muted hover:text-slate-700">
+                <X size={16} />
+              </button>
+            </div>
+            <button
+              onClick={newConversation}
+              className="mx-3 mt-3 flex items-center justify-center gap-1 rounded-lg bg-brand py-2 text-sm text-white hover:bg-brand/90"
+            >
+              <Plus size={15} /> 新建对话
+            </button>
+            <div className="mt-2 flex-1 overflow-y-auto px-2 pb-3">
+              {convs.length === 0 ? (
+                <p className="px-3 py-8 text-center text-xs text-muted">还没有历史对话</p>
+              ) : (
+                convs.map((c) => (
+                  <div
+                    key={c.id}
+                    onClick={() => void openConversation(c.id)}
+                    className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+                      c.id === cid ? 'bg-brand/10 text-brand' : 'text-slate-600 hover:bg-black/5'
+                    }`}
+                  >
+                    <History size={13} className="shrink-0 opacity-60" />
+                    <span className="flex-1 truncate">{c.title || '新对话'}</span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        void deleteConversation(c.id)
+                      }}
+                      className="shrink-0 text-muted opacity-0 transition hover:text-red-500 group-hover:opacity-100"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { extractPlaceholders, renderTemplate } from './engine/template'
 import { aiFillTemplate } from './engine/aifill'
 import { runAgent } from './agent/loop'
 import { addMemory, addFileMemory } from './memory'
+import { syncPull, pushMemories, pushInfo } from './sync'
 import * as account from './account'
 import type {
   RelayProfileInput,
@@ -85,10 +86,15 @@ export function registerIpc(): void {
 
   // ---- 信息库 ----
   ipcMain.handle('info:list', () => configStore.getInfoEntries())
-  ipcMain.handle('info:save', (_e, entry: Omit<InfoEntry, 'id'> & { id?: string }) =>
-    configStore.saveInfoEntry(entry)
-  )
-  ipcMain.handle('info:delete', (_e, id: string) => configStore.deleteInfoEntry(id))
+  ipcMain.handle('info:save', (_e, entry: Omit<InfoEntry, 'id'> & { id?: string }) => {
+    const r = configStore.saveInfoEntry(entry)
+    pushInfo()
+    return r
+  })
+  ipcMain.handle('info:delete', (_e, id: string) => {
+    configStore.deleteInfoEntry(id)
+    pushInfo()
+  })
 
   // ---- 能力探测 ----
   ipcMain.handle('env:capabilities', () => ({
@@ -310,9 +316,11 @@ export function registerIpc(): void {
   // ---- 账号（手机登录，对接后端）----
   ipcMain.handle('auth:status', () => ({ loggedIn: account.isLoggedIn(), phone: account.getPhone() }))
   ipcMain.handle('auth:sendCode', (_e, phone: string) => account.sendCode(phone))
-  ipcMain.handle('auth:login', (_e, args: { phone: string; code: string }) =>
-    account.login(args.phone, args.code)
-  )
+  ipcMain.handle('auth:login', async (_e, args: { phone: string; code: string }) => {
+    const r = await account.login(args.phone, args.code)
+    if (r.ok) await syncPull()
+    return r
+  })
   ipcMain.handle('auth:logout', () => {
     account.logout()
     return { ok: true }
@@ -390,18 +398,22 @@ export function registerIpc(): void {
   ipcMain.handle('memory:list', () => configStore.getMemories())
   ipcMain.handle('memory:add', async (_e, args: { text: string; source?: 'message' | 'note' }) => {
     await addMemory(args.text, args.source || 'message')
+    pushMemories()
     return configStore.getMemories()
   })
   ipcMain.handle('memory:addFile', async (_e, file: DroppedFile) => {
     await addFileMemory(file.name, decode(file))
+    pushMemories()
     return configStore.getMemories()
   })
   ipcMain.handle('memory:delete', (_e, id: string) => {
     configStore.deleteMemory(id)
+    pushMemories()
     return configStore.getMemories()
   })
   ipcMain.handle('memory:clear', () => {
     configStore.clearMemories()
+    pushMemories()
     return []
   })
 

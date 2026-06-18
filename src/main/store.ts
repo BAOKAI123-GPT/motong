@@ -167,6 +167,9 @@ export const configStore = {
   getInfoEntries(): InfoEntry[] {
     return store.get('infoEntries')
   },
+  setInfoEntries(list: InfoEntry[]): void {
+    store.set('infoEntries', list)
+  },
   saveInfoEntry(entry: Omit<InfoEntry, 'id'> & { id?: string }): InfoEntry {
     const list = store.get('infoEntries')
     const existing = entry.id ? list.find((e) => e.id === entry.id) : undefined

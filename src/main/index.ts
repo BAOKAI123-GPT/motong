@@ -2,6 +2,7 @@ import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'node:path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpc } from './ipc'
+import { syncPull } from './sync'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -43,6 +44,8 @@ app.whenReady().then(() => {
 
   registerIpc()
   createWindow()
+  // 启动若已登录，从云端拉取记忆库/信息库（更新/重装后自动恢复，跨端互通）
+  void syncPull()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
