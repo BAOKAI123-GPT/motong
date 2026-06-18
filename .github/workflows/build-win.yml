@@ -9,7 +9,7 @@ on:
       lo_version:
         description: 'LibreOffice 版本 (stable)'
         required: false
-        default: '24.8.4'
+        default: '25.8.7'
 
 permissions:
   contents: write
@@ -30,7 +30,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = "${{ github.event.inputs.lo_version }}"
-          if (-not $ver) { $ver = "24.8.4" }
+          if (-not $ver) { $ver = "25.8.7" }
           $url = "https://download.documentfoundation.org/libreoffice/stable/$ver/win/x86_64/LibreOffice_${ver}_Win_x86-64.msi"
           Write-Host "Downloading $url"
           Invoke-WebRequest -Uri $url -OutFile lo.msi -UseBasicParsing
