@@ -2,7 +2,11 @@ import * as XLSX from 'xlsx'
 import JSZip from 'jszip'
 import { DOMParser } from '@xmldom/xmldom'
 import { PDFDocument } from 'pdf-lib'
+import { writeFile, readFile, mkdtemp } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { readWorkbook } from './read'
+import { sofficeConvert } from './soffice'
 
 export type FileKind = 'spreadsheet' | 'document' | 'pdf' | 'image' | 'other'
 
@@ -72,6 +76,19 @@ async function docxText(buf: Buffer): Promise<{ text: string; placeholders: stri
   return { text, placeholders: findPlaceholders(text) }
 }
 
+const LEGACY_DOC = new Set(['doc', 'wps', 'rtf', 'odt'])
+/** 旧版/其它文档(.doc/.wps/.rtf/.odt)：先用 LibreOffice 转成 .docx，再按 docx 解析（避免编码乱码） */
+async function legacyDocText(name: string, buf: Buffer): Promise<{ text: string; placeholders: string[] }> {
+  const ext = extOf(name) || 'doc'
+  const inDir = await mkdtemp(join(tmpdir(), 'wenshu-doc-'))
+  const inputPath = join(inDir, `input.${ext}`)
+  await writeFile(inputPath, buf)
+  const profileDir = await mkdtemp(join(tmpdir(), 'wenshu-lo-'))
+  const docxPath = await sofficeConvert(inputPath, 'docx', profileDir)
+  const docxBuf = await readFile(docxPath)
+  return docxText(docxBuf)
+}
+
 /** 把上传文件解析成模型可读内容 */
 export async function summarizeFile(name: string, buf: Buffer): Promise<FileSummary> {
   const ext = extOf(name)
@@ -92,6 +109,28 @@ export async function summarizeFile(name: string, buf: Buffer): Promise<FileSumm
       }
     } catch (e: any) {
       return { name, ext, kind: 'document', meta: `无法读取：${e?.message ?? e}` }
+    }
+  }
+  if (LEGACY_DOC.has(ext)) {
+    try {
+      const { text, placeholders } = await legacyDocText(name, buf)
+      if (!text.trim()) throw new Error('未提取到文字')
+      const isTpl = placeholders.length > 0
+      return {
+        name,
+        ext,
+        kind: 'document',
+        text: text.slice(0, 6000),
+        placeholders: isTpl ? placeholders : undefined,
+        meta: isTpl ? `文档模板，含 ${placeholders.length} 个占位符` : '文档（经 LibreOffice 解析）'
+      }
+    } catch (e: any) {
+      return {
+        name,
+        ext,
+        kind: 'document',
+        meta: `无法读取旧版 .${ext}：${e?.message ?? e}（需 LibreOffice；Windows 版已内置，若仍失败可把文件另存为 .docx 再上传）`
+      }
     }
   }
   if (ext === 'pdf') {
