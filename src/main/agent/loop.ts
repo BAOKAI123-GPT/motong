@@ -3,10 +3,13 @@ import { configStore } from '../store'
 import { memoryContext } from '../memory'
 import { summarizeFile } from '../engine/filecontent'
 import { TOOL_SPECS, dispatchTool, type AgentCtx, type AgentFile } from './tools'
+import { getConvFiles, addUploads, addGenerated } from './filecache'
 import type { WsQuota } from '../../shared/types'
 
 export interface AgentInput {
   profileId: string
+  /** 当前对话 id，用于跨轮文件缓存（无 id 时退化为仅本轮可用） */
+  convId?: string
   history: { role: 'user' | 'assistant'; content: string }[]
   userText: string
   files: { name: string; base64: string }[]
@@ -66,26 +69,38 @@ export async function runAgent(
     _seq: 0
   }
 
-  // 注册上传文件 f1、f2…，并解析成可读内容
-  const uploaded: AgentFile[] = input.files.map((f, i) => ({
-    id: `f${i + 1}`,
+  // 跨轮文件保持：把本轮上传文件并入会话缓存，得到稳定 id（uX）；
+  // 再取会话里历史轮次累积的文件（含上一轮生成的），一并注册进 ctx.files，
+  // 这样第二轮「把刚才那个文件改成…」时模型仍能按 id 引用、工具仍能读取。
+  const fresh = addUploads(input.convId || '', input.files)
+  const freshIds = new Set(fresh.map((f) => f.id))
+  const cached = getConvFiles(input.convId || '')
+  // 缓存为空（无 convId 等退化场景）时回落到本轮上传
+  const allFiles = cached.length ? cached : fresh
+  const registered: AgentFile[] = allFiles.map((f) => ({
+    id: f.id,
     name: f.name,
     buf: Buffer.from(f.base64, 'base64')
   }))
-  uploaded.forEach((f) => ctx.files.set(f.id, f))
+  registered.forEach((f) => ctx.files.set(f.id, f))
 
   const extOf = (name: string): string => (/\.([^.]+)$/.exec(name)?.[1] || 'png').toLowerCase()
   const fileLines: string[] = []
   const images: AgentFile[] = []
-  for (const f of uploaded) {
+  for (const f of registered) {
+    const isFresh = freshIds.has(f.id)
     const s = await summarizeFile(f.name, f.buf)
     if (s.kind === 'image') images.push(f)
     let line = `- ${f.id}：${f.name}（${s.meta || s.kind}）`
     if (s.placeholders?.length) line += `\n  占位符：${s.placeholders.join('、')}`
-    if (s.text) line += `\n  内容预览：\n${s.text}`
+    // 控制 token：只对「本轮新上传」的文件附内容预览；
+    // 历史文件只列出 id/名称，模型需要时再用 read_file 按 id 读取，避免每轮重发全部文件内容。
+    if (isFresh && s.text) line += `\n  内容预览：\n${s.text}`
     fileLines.push(line)
   }
-  const hasImage = images.length > 0
+  // 识图只处理本轮新上传的图片（历史图片不再每轮重发，省 token）
+  const freshImages = images.filter((f) => freshIds.has(f.id))
+  const hasImage = freshImages.length > 0
 
   const infoText = infoEntries.length
     ? infoEntries.map((e) => `- ${e.category} / ${e.label}: ${e.value}`).join('\n')
@@ -97,7 +112,9 @@ export async function runAgent(
     content:
       `${SYSTEM}\n\n【企业信息库】\n${infoText}` +
       (memText ? `\n\n【长期记忆】（用户保存的、可参考）\n${memText}` : '') +
-      (fileLines.length ? `\n\n【本轮已上传文件】\n${fileLines.join('\n')}` : '')
+      (fileLines.length
+        ? `\n\n【对话中的文件】（本对话里上传或生成过的文件，可按 id 用 read_file 读取后处理；用户说"刚才那个文件"通常指其中之一）\n${fileLines.join('\n')}`
+        : '')
   }
 
   const history: RawMessage[] = input.history
@@ -108,7 +125,7 @@ export async function runAgent(
   let userContent: unknown = input.userText || '（无文字，见上传文件）'
   if (hasImage) {
     const parts: any[] = [{ type: 'text', text: input.userText || '请处理我上传的图片/聊天记录' }]
-    for (const f of images) {
+    for (const f of freshImages) {
       parts.push({
         type: 'image_url',
         image_url: { url: `data:image/${extOf(f.name)};base64,${f.buf.toString('base64')}` }
@@ -118,8 +135,12 @@ export async function runAgent(
   }
   const messages: RawMessage[] = [system, ...history, { role: 'user', content: userContent }]
 
-  const filesOut = (): { name: string; base64: string }[] =>
-    ctx.generated.map((g) => ({ name: g.name, base64: g.buf.toString('base64') }))
+  // 把本轮生成的文件输出给渲染层，同时回写会话缓存，使下一轮可继续引用（如「再改一下刚才那个表」）
+  const filesOut = (): { name: string; base64: string }[] => {
+    const out = ctx.generated.map((g) => ({ id: g.id, name: g.name, base64: g.buf.toString('base64') }))
+    addGenerated(input.convId || '', out)
+    return out.map(({ name, base64 }) => ({ name, base64 }))
+  }
 
   for (let step = 0; step < MAX_STEPS; step++) {
     const res = await chatRaw(messages, TOOL_SPECS, crypto.randomUUID())
@@ -143,7 +164,7 @@ export async function runAgent(
       return {
         ok: true,
         text: contentToText(msg.content) || '已完成。',
-        files: ctx.generated.map((g) => ({ name: g.name, base64: g.buf.toString('base64') }))
+        files: filesOut()
       }
     }
     // 执行工具
@@ -162,6 +183,6 @@ export async function runAgent(
   return {
     ok: true,
     text: '（已达到工具调用步数上限，先把已生成的文件给你；如未完成可再说一声）',
-    files: ctx.generated.map((g) => ({ name: g.name, base64: g.buf.toString('base64') }))
+    files: filesOut()
   }
 }

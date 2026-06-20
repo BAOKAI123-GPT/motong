@@ -10,6 +10,7 @@ import { mergePdfs, pdfPageCount, splitEachPage, parsePageRanges, extractPages }
 import { extractPlaceholders, renderTemplate } from './engine/template'
 import { aiFillTemplate } from './engine/aifill'
 import { runAgent } from './agent/loop'
+import { dropConv } from './agent/filecache'
 import { addMemory, addFileMemory } from './memory'
 import { syncPull, pushMemories, pushInfo } from './sync'
 import * as account from './account'
@@ -371,6 +372,12 @@ export function registerIpc(): void {
     } catch (err: any) {
       return { ok: false, error: String(err?.message ?? err) }
     }
+  })
+
+  // 删除对话时释放该会话的文件缓存（内存）
+  ipcMain.handle('agent:dropConv', (_e, convId: string) => {
+    dropConv(convId)
+    return { ok: true }
   })
 
   // 保存生成的文件（base64）到用户选择的位置

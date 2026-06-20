@@ -216,6 +216,8 @@ export interface AgentChatMessage {
 
 export interface AgentSendInput {
   profileId: string
+  /** 当前对话 id，用于主进程按会话缓存上传/生成的文件，实现跨轮引用（无需重传） */
+  convId?: string
   /** 之前的对话（仅文字） */
   history: AgentChatMessage[]
   userText: string

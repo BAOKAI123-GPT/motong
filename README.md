@@ -49,11 +49,12 @@ npm run build:win    # 打 Windows 安装包（nsis + portable）
 引擎层用真实中文样例做了 Node 端到端断言，全部通过：
 
 ```bash
-for t in engine pdf template agent; do
+for t in engine pdf template agent agent-memory; do
   ./node_modules/.bin/esbuild verify/$t.test.ts --bundle --platform=node --format=cjs --packages=external --outfile=verify/$t.test.cjs
   node verify/$t.test.cjs
 done
 # 转换/表格 20 · PDF 12 · 模板 14 · Agent工具 13（生成送货单/套模板/转格式/拆分打包）
+# · 跨轮文件 16（多轮不重传仍能引用上一轮文件/生成文件可下载）
 ```
 
 > 注：LibreOffice 在开发沙箱里无法运行（环境限制），其转换链路为构造正确性验证；真机可用。

@@ -107,6 +107,9 @@ const api = {
   agent: {
     send: (input: AgentSendInput): Promise<AgentSendResult> =>
       ipcRenderer.invoke('agent:send', input),
+    /** 删除对话时通知主进程释放该会话的文件缓存 */
+    dropConv: (convId: string): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('agent:dropConv', convId),
     /** 订阅 AI 处理进度，返回取消订阅函数 */
     onProgress: (cb: (msg: string) => void): (() => void) => {
       const listener = (_e: unknown, msg: string): void => cb(msg)

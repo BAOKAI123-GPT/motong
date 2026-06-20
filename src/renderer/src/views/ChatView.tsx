@@ -97,12 +97,19 @@ export default function ChatView({
     })()
   }, [])
 
-  // 自动保存当前对话（标题取首条用户消息；不存上传文件的 base64，避免库膨胀）
+  // 自动保存当前对话（标题取首条用户消息）。
+  // 关键：剔除大 base64 —— 上传文件(attachFiles)整体不存；生成文件(files)只留 name、清掉 base64。
+  // 否则把数 MB 的 base64 写进 IndexedDB 容易写失败/库损坏，恢复后只剩文字标题、文件全丢。
+  // 本轮刚生成、未保存的文件仍在内存 messages 里可正常下载；历史恢复的文件靠跨轮缓存重新生成。
   useEffect(() => {
     if (messages.length === 0) return
     const firstUser = messages.find((m) => m.role === 'user')
     const title = (firstUser?.content || '新对话').replace(/\n/g, ' ').slice(0, 30) || '新对话'
-    const slim = messages.map((m) => ({ ...m, attachFiles: undefined }))
+    const slim = messages.map((m) => ({
+      ...m,
+      attachFiles: undefined,
+      files: m.files?.map((f) => ({ name: f.name, base64: '' }))
+    }))
     void convSave({ id: cid, title, updatedAt: Date.now(), messages: slim }).then(refreshList)
   }, [messages])
 
@@ -124,6 +131,7 @@ export default function ChatView({
   }
   async function deleteConversation(id: string): Promise<void> {
     await convDel(id)
+    void window.api.agent.dropConv(id) // 释放主进程里该会话的文件缓存
     await refreshList()
     if (id === cid) newConversation()
   }
@@ -153,7 +161,7 @@ export default function ChatView({
     setBusy(true)
     setProgress('正在思考…')
     try {
-      const r = await window.api.agent.send({ profileId: '', history, userText: text, files })
+      const r = await window.api.agent.send({ profileId: '', convId: cid, history, userText: text, files })
       if (r.quota) setQuota(r.quota)
       if (r.needLogin) {
         toast.err('登录已过期，请重新登录')
@@ -185,6 +193,11 @@ export default function ChatView({
   }
 
   async function saveFile(f: GeneratedFilePayload): Promise<void> {
+    // 历史会话恢复后，生成文件的 base64 已在持久化时清空（避免库膨胀）；此时无法直接下载。
+    if (!f.base64) {
+      toast.info('这是历史对话里生成过的文件，内容未保留。让我「重新生成一下刚才那个文件」即可下载。')
+      return
+    }
     const r = await window.api.file.save(f)
     if (r.ok) toast.ok(`已保存：${r.path}`)
     else if (!r.canceled) toast.err(r.error || '保存失败')
@@ -534,31 +547,43 @@ function Bubble({
           </div>
         )}
 
-        {/* 生成的文件：保存 / 存记忆 */}
+        {/* 生成的文件：保存 / 存记忆。base64 为空者为历史恢复文件，标注「历史」并禁存记忆 */}
         {msg.files && msg.files.length > 0 && (
           <div className="mt-2 space-y-1.5">
-            {msg.files.map((f, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 rounded-lg border border-brand2/40 bg-brand2/10 px-3 py-2 text-sm text-emerald-700"
-              >
-                <FileDown size={16} className="shrink-0 text-emerald-600" />
-                <span className="flex-1 truncate">{f.name}</span>
-                <button
-                  onClick={() => onSaveFile(f)}
-                  className="shrink-0 text-xs text-emerald-600 hover:text-slate-900"
+            {msg.files.map((f, i) => {
+              const expired = !f.base64
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    expired
+                      ? 'border-edge bg-black/[0.03] text-muted'
+                      : 'border-brand2/40 bg-brand2/10 text-emerald-700'
+                  }`}
                 >
-                  保存
-                </button>
-                <button
-                  onClick={() => onRememberFile(f)}
-                  title="存入记忆"
-                  className="shrink-0 text-muted hover:text-brand"
-                >
-                  <BrainCircuit size={13} />
-                </button>
-              </div>
-            ))}
+                  <FileDown size={16} className={`shrink-0 ${expired ? 'text-muted' : 'text-emerald-600'}`} />
+                  <span className="flex-1 truncate">{f.name}</span>
+                  {expired && <span className="shrink-0 text-[11px] text-muted">历史 · 需重新生成</span>}
+                  <button
+                    onClick={() => onSaveFile(f)}
+                    className={`shrink-0 text-xs ${
+                      expired ? 'text-muted hover:text-slate-700' : 'text-emerald-600 hover:text-slate-900'
+                    }`}
+                  >
+                    保存
+                  </button>
+                  {!expired && (
+                    <button
+                      onClick={() => onRememberFile(f)}
+                      title="存入记忆"
+                      className="shrink-0 text-muted hover:text-brand"
+                    >
+                      <BrainCircuit size={13} />
+                    </button>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
