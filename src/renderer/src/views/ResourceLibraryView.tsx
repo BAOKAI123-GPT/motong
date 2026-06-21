@@ -1,4 +1,14 @@
-import { ArrowRight, ExternalLink, Library, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import {
+  ArrowRight,
+  CheckCircle2,
+  Download,
+  ExternalLink,
+  FileCog,
+  Library,
+  Loader2,
+  Sparkles
+} from 'lucide-react'
 import type { ViewId } from '../App'
 
 type Status = 'builtin' | 'integrated' | 'planned' | 'external'
@@ -99,13 +109,6 @@ const CATALOG: Group[] = [
     title: '文档转换 · 开源社区精选',
     tools: [
       {
-        name: 'LibreOffice',
-        desc: '本软件文档/PDF 转换的底层引擎；装上即可解锁 Word/PPT/WPS↔PDF 等全部文档族转换。',
-        license: 'MPL-2.0 · 需本机安装',
-        status: 'integrated',
-        url: 'https://www.libreoffice.org/'
-      },
-      {
         name: 'Pandoc',
         desc: '通用文档转换神器：Markdown ↔ Word ↔ PDF ↔ HTML ↔ LaTeX，结构不丢。',
         license: 'GPLv2 · 可启用',
@@ -157,6 +160,148 @@ const STATUS_META: Record<Status, { label: string; cls: string }> = {
   external: { label: '外部开源', cls: 'bg-black/[0.05] text-slate-600 border-edge' }
 }
 
+const isWindows = (): boolean =>
+  typeof navigator !== 'undefined' && /win/i.test(navigator.userAgent || '')
+
+/** 文档转换引擎（LibreOffice）按需下载卡：进入时查状态，可下载安装并显示进度。 */
+function LibreOfficePluginCard(): JSX.Element {
+  const win = isWindows()
+  const [installed, setInstalled] = useState<boolean | null>(null)
+  const [installing, setInstalling] = useState(false)
+  const [phase, setPhase] = useState<'download' | 'extract' | 'done' | null>(null)
+  const [percent, setPercent] = useState(0)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    window.api.plugin
+      .loStatus()
+      .then((s) => alive && setInstalled(s.installed))
+      .catch(() => alive && setInstalled(false))
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  async function handleInstall(): Promise<void> {
+    setError('')
+    setInstalling(true)
+    setPhase('download')
+    setPercent(0)
+    const off = window.api.plugin.onLoProgress((p) => {
+      setPhase(p.phase)
+      if (typeof p.percent === 'number') setPercent(p.percent)
+    })
+    try {
+      const r = await window.api.plugin.loInstall()
+      if (r.ok) {
+        setInstalled(true)
+        setPhase('done')
+        setPercent(100)
+      } else {
+        setError(r.error || '安装失败')
+        setPhase(null)
+      }
+    } catch (e) {
+      setError(String((e as Error)?.message ?? e))
+      setPhase(null)
+    } finally {
+      off()
+      setInstalling(false)
+    }
+  }
+
+  const phaseLabel =
+    phase === 'download'
+      ? `下载中 ${percent}%`
+      : phase === 'extract'
+        ? '解压安装中…'
+        : phase === 'done'
+          ? '已完成'
+          : ''
+
+  return (
+    <div className="rounded-xl border border-brand/40 bg-brand/[0.06] p-5">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-brand">
+          <FileCog size={18} />
+        </div>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">文档转换引擎（LibreOffice）</h3>
+            {installed === true && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-brand2/40 bg-brand2/15 px-2 py-0.5 text-[10px] text-emerald-600">
+                <CheckCircle2 size={11} /> 已安装
+              </span>
+            )}
+            {installed === false && (
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] text-amber-700">
+                未安装
+              </span>
+            )}
+          </div>
+          <p className="mt-1.5 text-xs leading-relaxed text-muted">
+            用于 Word/PDF/PPT 等文档转换与导出，约 350MB，按需下载一次即可，不再随安装包附带。
+          </p>
+
+          {!win ? (
+            <p className="mt-3 text-xs text-slate-600">
+              当前系统请到{' '}
+              <a
+                href="https://www.libreoffice.org/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-brand hover:underline"
+              >
+                libreoffice.org
+              </a>{' '}
+              手动安装 LibreOffice。
+            </p>
+          ) : (
+            <div className="mt-3">
+              {!installing && installed !== true && (
+                <button
+                  onClick={handleInstall}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-1.5 text-xs font-medium text-white hover:bg-brand/90"
+                >
+                  <Download size={14} /> 下载安装
+                </button>
+              )}
+
+              {installed === true && !installing && (
+                <button
+                  onClick={handleInstall}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-edge px-3.5 py-1.5 text-xs text-slate-600 hover:text-slate-900"
+                >
+                  <Download size={14} /> 重新安装
+                </button>
+              )}
+
+              {installing && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2 text-xs text-brand">
+                    <Loader2 size={14} className="animate-spin" /> {phaseLabel}
+                  </div>
+                  {phase === 'download' && (
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/[0.08]">
+                      <div
+                        className="h-full rounded-full bg-brand transition-all"
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ResourceLibraryView({
   onOpen
 }: {
@@ -171,6 +316,10 @@ export default function ResourceLibraryView({
       <p className="mt-1 text-sm text-muted">
         内置工具开箱即用；下面精选了一批开源社区口碑项目，可按需引入增强文书处理能力。点项目名进主页。
       </p>
+
+      <div className="mt-6">
+        <LibreOfficePluginCard />
+      </div>
 
       <div className="mt-8 space-y-8">
         {CATALOG.map((group) => (

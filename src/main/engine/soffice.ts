@@ -1,3 +1,4 @@
+import { app } from 'electron'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { mkdtemp, readdir } from 'node:fs/promises'
@@ -11,6 +12,12 @@ import { pathToFileURL } from 'node:url'
  * 打包后也可把便携版放进 resources，再在这里补一条候选路径。
  */
 let cachedPath: string | null | undefined
+
+/** 清空探测缓存：按需下载安装完成后调用，让下次 findSoffice() 重新探测到新装的引擎。 */
+export function resetSofficeCache(): void {
+  cachedPath = undefined
+}
+
 export function findSoffice(): string | null {
   if (cachedPath !== undefined) return cachedPath
   const isWin = process.platform === 'win32'
@@ -21,6 +28,8 @@ export function findSoffice(): string | null {
   if (process.resourcesPath) {
     bundled.push(join(process.resourcesPath, 'libreoffice', 'program', exe))
   }
+  // 1.5) 用户在「资源库」按需下载、解压到用户数据目录的版本
+  bundled.push(join(app.getPath('userData'), 'libreoffice', 'program', exe))
 
   // 2) 退回本机安装的 LibreOffice
   const system =
@@ -54,7 +63,7 @@ export async function sofficeConvert(
   let soffice = findSoffice()
   if (!soffice) {
     throw new Error(
-      '没有找到 LibreOffice。文档/PDF 类转换需要它，请先安装 LibreOffice（免费）后重试。'
+      '该功能需要文档转换引擎（LibreOffice）。请到「资源库」下载安装后重试。'
     )
   }
   // Windows：优先用 soffice.com（控制台版，命令行会阻塞到转换真正完成；soffice.exe 会提前返回导致取不到产出）

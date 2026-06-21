@@ -104,8 +104,8 @@ export default function ConvertView({ handoff, clearHandoff }: Props): JSX.Eleme
             <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               <span>
-                检测到本机未安装 LibreOffice，Word / PDF / PPT 等文档类转换暂不可用（Excel/CSV
-                互转不受影响）。安装免费的 LibreOffice 后即可解锁。
+                该功能需要文档转换引擎（LibreOffice），Word / PDF / PPT 等文档类转换暂不可用（Excel/CSV
+                互转不受影响）。请到「资源库」下载安装后即可解锁。
               </span>
             </div>
           )}

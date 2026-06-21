@@ -22,12 +22,7 @@ win:
   target:
     - nsis
     - portable
-  # 仅 Windows 打包内置 LibreOffice 便携版（开箱即用，约 1.5G）
-  extraResources:
-    - from: resources/libreoffice
-      to: libreoffice
-      filter:
-        - '**/*'
+  # 安装包不再内置 LibreOffice（瘦身）：装完 App 后在「资源库」按需下载到用户数据目录。
   artifactName: Motong-Setup-${version}.${ext}
 nsis:
   oneClick: false

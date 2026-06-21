@@ -38,6 +38,21 @@ interface ChatMsg {
   content: string
 }
 
+interface LoStatus {
+  installed: boolean
+  path: string | null
+}
+
+interface LoProgress {
+  phase: 'download' | 'extract' | 'done'
+  percent?: number
+}
+
+interface LoInstallResult {
+  ok: boolean
+  error?: string
+}
+
 const api = {
   config: {
     getProfiles: (): Promise<RelayProfile[]> => ipcRenderer.invoke('config:getProfiles'),
@@ -120,6 +135,18 @@ const api = {
   file: {
     save: (args: GeneratedFilePayload): Promise<SavedFileResult> =>
       ipcRenderer.invoke('file:save', args)
+  },
+  plugin: {
+    /** 查询文档转换引擎（LibreOffice）是否已安装 */
+    loStatus: (): Promise<LoStatus> => ipcRenderer.invoke('plugin:loStatus'),
+    /** 按需下载并安装文档转换引擎，返回最终结果 */
+    loInstall: (): Promise<LoInstallResult> => ipcRenderer.invoke('plugin:loInstall'),
+    /** 订阅安装进度，返回取消订阅函数 */
+    onLoProgress: (cb: (p: LoProgress) => void): (() => void) => {
+      const listener = (_e: unknown, p: LoProgress): void => cb(p)
+      ipcRenderer.on('plugin:loProgress', listener)
+      return () => ipcRenderer.removeListener('plugin:loProgress', listener)
+    }
   },
   memory: {
     list: (): Promise<MemoryEntry[]> => ipcRenderer.invoke('memory:list'),

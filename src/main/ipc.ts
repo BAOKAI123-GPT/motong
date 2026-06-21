@@ -13,6 +13,7 @@ import { runAgent } from './agent/loop'
 import { dropConv } from './agent/filecache'
 import { addMemory, addFileMemory } from './memory'
 import { syncPull, pushMemories, pushInfo } from './sync'
+import { libreOfficeStatus, installLibreOffice } from './plugins'
 import * as account from './account'
 import type {
   RelayProfileInput,
@@ -106,6 +107,14 @@ export function registerIpc(): void {
     targets: targetsForExt(ext),
     libreofficeAvailable: libreofficeAvailable()
   }))
+
+  // ---- 可选插件：文档转换引擎（LibreOffice）按需下载 ----
+  ipcMain.handle('plugin:loStatus', () => libreOfficeStatus())
+  ipcMain.handle('plugin:loInstall', async (e) => {
+    return installLibreOffice((p) => {
+      if (!e.sender.isDestroyed()) e.sender.send('plugin:loProgress', p)
+    })
+  })
 
   // ---- 格式转换 ----
   ipcMain.handle('convert:run', async (e, req: ConvertRequest): Promise<ConvertResult> => {
