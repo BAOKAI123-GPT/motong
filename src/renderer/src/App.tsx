@@ -42,22 +42,61 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<ViewId>('chat')
   const [auth, setAuth] = useState<AuthState | null>(null)
 
-  const [update, setUpdate] = useState<{ latest: string; notes: string; url: string } | null>(null)
+  const [update, setUpdate] = useState<{
+    latest: string
+    notes: string
+    url: string
+    forceUpdate: boolean
+  } | null>(null)
 
   async function refreshAuth(): Promise<void> {
     setAuth(await window.api.auth.status())
   }
   useEffect(() => {
     void refreshAuth()
-    // 启动版本检测：不是最新版则提示去官网更新
+    // 启动版本检测：不是最新版则提示去官网更新；后端下发 forceUpdate 时强制阻断旧版
     void window.api.app
       .checkUpdate()
       .then((u) => {
-        if (u?.needUpdate) setUpdate({ latest: u.latest, notes: u.notes, url: u.url })
+        if (u?.needUpdate)
+          setUpdate({ latest: u.latest, notes: u.notes, url: u.url, forceUpdate: !!u.forceUpdate })
       })
       .catch(() => {})
   }, [])
 
+  // 强制更新：全屏、不可关闭遮罩。优先于一切界面（含登录/加载），旧功能被完全挡住。
+  if (update && update.forceUpdate) {
+    return (
+      <>
+        <div className="fixed inset-0 z-[9999] grid place-items-center bg-ink/95 backdrop-blur-sm p-6">
+          <div className="w-full max-w-md rounded-2xl border border-edge bg-panel p-7 text-center shadow-2xl">
+            <div className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-brand text-xl font-black text-[#3a2a05]">
+              墨
+            </div>
+            <h2 className="mt-4 text-lg font-semibold text-slate-800">请更新到最新版</h2>
+            <p className="mt-1 text-sm text-muted">
+              当前版本已停用，新版本 <b className="text-slate-700">v{update.latest}</b> 修复了对话与文件处理核心功能：
+              多轮对话不再丢失已上传的文件、可稳定生成并下载成品文件。请更新后继续使用。
+            </p>
+            {update.notes && (
+              <div className="mt-4 whitespace-pre-wrap rounded-lg border border-edge bg-ink/40 px-4 py-3 text-left text-xs leading-relaxed text-slate-600">
+                {update.notes}
+              </div>
+            )}
+            <button
+              onClick={() => void window.api.system.openExternal(update.url)}
+              className="mt-5 w-full rounded-xl bg-brand py-2.5 text-sm font-medium text-white hover:bg-brand/90"
+            >
+              去官网更新
+            </button>
+          </div>
+        </div>
+        <Toaster />
+      </>
+    )
+  }
+
+  // 建议更新：可关闭横幅（非强制）
   const updateBanner = update ? (
     <div className="fixed inset-x-0 top-0 z-50 flex items-center justify-center gap-3 bg-brand px-4 py-2 text-xs text-white shadow-md">
       <span>
