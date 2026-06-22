@@ -38,10 +38,26 @@ function register(ctx: AgentCtx, name: string, buf: Buffer): AgentFile {
   ctx.generated.push(f)
   return f
 }
+// 容错取文件：模型常把上传文件 id(u1) 误写成 f1/file1/1 或直接给文件名。
+// 依次尝试：精确 → 大小写/空白 → 末尾数字同号(唯一) → 文件名(全等/包含) → 全场仅一个文件。
+// 都不中才抛错，并把"当前可用文件清单"带回，引导模型用正确 id 重试（绝不让用户重新上传）。
 function getFile(ctx: AgentCtx, id: string): AgentFile {
-  const f = ctx.files.get(id)
-  if (!f) throw new Error(`找不到文件 ${id}`)
-  return f
+  const raw = String(id ?? '').trim()
+  const exact = ctx.files.get(raw)
+  if (exact) return exact
+  const all = [...ctx.files.values()]
+  const norm = raw.toLowerCase()
+  for (const v of all) if (v.id.toLowerCase() === norm) return v
+  const num = /(\d+)\s*$/.exec(raw)?.[1]
+  if (num) {
+    const cands = all.filter((v) => new RegExp(`${num}$`).test(v.id))
+    if (cands.length === 1) return cands[0]
+  }
+  for (const v of all) if (v.name === raw || v.name.toLowerCase() === norm) return v
+  if (norm.length >= 2) for (const v of all) if (v.name.toLowerCase().includes(norm)) return v
+  if (all.length === 1) return all[0]
+  const avail = all.map((v) => `${v.id}(${v.name})`).join('、') || '（当前没有任何文件）'
+  throw new Error(`找不到文件 "${raw}"。当前可用文件：${avail}。请用清单里的确切 id 重试，不要让用户重新上传。`)
 }
 async function zipBuffers(files: { name: string; buffer: Buffer }[]): Promise<Buffer> {
   const zip = new JSZip()
@@ -62,7 +78,7 @@ export const TOOL_SPECS = [
       parameters: {
         type: 'object',
         properties: {
-          file_id: { type: 'string', description: '文件 id，如 f1 或 g1' },
+          file_id: { type: 'string', description: '文件 id：上传的文件以 u 开头(如 u1)、生成的文件以 g 开头(如 g1)；确切 id 见系统提示【对话中的文件】清单' },
           sheet_name: { type: 'string', description: '可选：要查看的工作表名（支持模糊匹配）' }
         },
         required: ['file_id']

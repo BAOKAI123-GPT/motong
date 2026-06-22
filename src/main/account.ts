@@ -34,21 +34,57 @@ export interface ApiResult<T = any> {
   data: T
 }
 
-/** 带 JWT 的后端请求 */
-export async function apiFetch<T = any>(path: string, init: RequestInit = {}): Promise<ApiResult<T>> {
+/** 带 JWT 的后端请求。
+ *  - timeoutMs：单次请求超时（AbortController）。普通接口 30s；agent 对话需更久(见 chatRaw 传 100s)。
+ *  - retries：仅对「快速发生的网络错误」(非超时、<20s) 重试，避免慢挂叠加；reqId 幂等保证重试不重复扣费。
+ *  失败时把 undici 的 e.cause(code/errno) 一并记录与回传，便于区分 DNS/TLS/连接被网关切断。 */
+export async function apiFetch<T = any>(
+  path: string,
+  init: RequestInit = {},
+  opts: { timeoutMs?: number; retries?: number } = {}
+): Promise<ApiResult<T>> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init.headers as Record<string, string> | undefined)
   }
   const tok = getToken()
   if (tok) headers.Authorization = `Bearer ${tok}`
-  try {
-    const res = await fetch(`${API_BASE}${path}`, { ...init, headers })
-    const data = await res.json().catch(() => ({}))
-    return { ok: res.ok, status: res.status, data: data as T }
-  } catch (e: any) {
-    return { ok: false, status: 0, data: { error: `连不上服务器：${e?.message ?? e}` } as T }
+  const timeoutMs = opts.timeoutMs ?? 30000
+  const retries = opts.retries ?? 0
+  let lastErr: any
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs)
+    const t0 = Date.now()
+    try {
+      const res = await fetch(`${API_BASE}${path}`, { ...init, headers, signal: ctrl.signal })
+      const data = await res.json().catch(() => ({}))
+      return { ok: res.ok, status: res.status, data: data as T }
+    } catch (e: any) {
+      lastErr = e
+      const isTimeout = e?.name === 'AbortError'
+      const causeCode = e?.cause?.code || e?.cause?.errno || e?.cause?.message || ''
+      console.warn('[apiFetch] 请求失败', {
+        path,
+        attempt,
+        name: e?.name,
+        message: e?.message,
+        cause: causeCode
+      })
+      // 快速失败的网络错误才重试（瞬时连接抖动）；超时或慢挂不重试，避免叠加等待
+      const fast = Date.now() - t0 < 20000
+      if (isTimeout || attempt >= retries || !fast) {
+        const msg = isTimeout
+          ? '请求超时了，请检查网络后重试，或把需求/文件拆小一点'
+          : `连不上服务器：${e?.message ?? e}${causeCode ? `（${causeCode}）` : ''}`
+        return { ok: false, status: 0, data: { error: msg } as T }
+      }
+      await new Promise((r) => setTimeout(r, 800)) // 退避后重试
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  return { ok: false, status: 0, data: { error: `连不上服务器：${lastErr?.message ?? lastErr}` } as T }
 }
 
 // —— 认证 ——

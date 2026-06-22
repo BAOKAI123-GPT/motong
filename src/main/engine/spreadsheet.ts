@@ -87,7 +87,10 @@ function buildWorkbook(spec: SpreadsheetSpec): ExcelJS.Workbook {
     c.font = { bold: true }
     c.fill = HEADER_FILL
     c.border = BORDER
-    c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }
+    // 阿拉伯语等 RTL 列的表头也用 RTL 阅读顺序，使阿语标题渲染正确
+    c.alignment = col.rtl
+      ? { horizontal: 'center', vertical: 'middle', wrapText: true, readingOrder: 'rtl' }
+      : { horizontal: 'center', vertical: 'middle', wrapText: true }
     ws.getColumn(i + 1).width = col.width || Math.max(10, String(col.header).length * 2 + 4)
   })
 
@@ -114,6 +117,10 @@ function buildWorkbook(spec: SpreadsheetSpec): ExcelJS.Workbook {
       c.value = (spec.totalsRow[i] ?? '') as ExcelJS.CellValue
       c.font = { bold: true }
       c.border = BORDER
+      // 合计行的 RTL 列同样右对齐 + RTL 阅读顺序
+      c.alignment = spec.columns[i]?.rtl
+        ? { vertical: 'middle', wrapText: true, horizontal: 'right', readingOrder: 'rtl' }
+        : { vertical: 'middle', wrapText: true }
     }
   }
 

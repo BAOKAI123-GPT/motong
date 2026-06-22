@@ -120,10 +120,13 @@ export async function chatRaw(
   tools?: unknown[],
   reqId?: string
 ): Promise<ChatRawResult> {
-  const r = await apiFetch('/api/agent/chat', {
-    method: 'POST',
-    body: JSON.stringify({ messages, tools, reqId })
-  })
+  // agent 对话耗时较长（后端最长 ~90s 即返回结构化结果）：客户端超时给 100s（略高于后端，<网关上限），
+  // 并对快速网络抖动重试 1 次——reqId 幂等，重试不会重复扣费。
+  const r = await apiFetch(
+    '/api/agent/chat',
+    { method: 'POST', body: JSON.stringify({ messages, tools, reqId }) },
+    { timeoutMs: 100000, retries: 1 }
+  )
   const d: any = r.data || {}
   if (r.status === 401) return { ok: false, needLogin: true, error: d.error || '请先登录' }
   if (r.status === 402) return { ok: false, needRecharge: true, quota: d.quota, error: d.error }
