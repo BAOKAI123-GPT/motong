@@ -34,6 +34,25 @@ export const SKILLS: Skill[] = [
     name: '办公文书写作',
     when: '用户要写或整理常见办公/行政文书：通知、公告、会议纪要、规章制度、商务函件、工作总结、产品/公司资料等。',
     guide: `按正式公文 / 商务文书规范撰写：结构清晰（标题、正文、落款/日期）、措辞得体专业、信息只用用户提供或信息库里的事实。需要交付成可下载文件时，先生成内容再用 convert_format 导出为 Word/PDF 等。`
+  },
+  {
+    id: 'ppt',
+    name: 'PPT 一键制作',
+    when: '用户要做 PPT / 幻灯片 / 演示文稿 / 汇报材料（给出主题与要求）。',
+    guide: `用 create_pptx 工具生成可直接编辑的 .pptx（用户拿到后还能在 PowerPoint/WPS 里继续改）：
+- 先理解主题与受众，规划一份逻辑清晰的大纲（封面→目录/背景→分点论述→结论），每页 title + 3~6 条要点(bullets)，要点精炼不堆砌。
+- 【参考内容/文献必须真实】凡涉及数据、事实、引文，先用 web_search 查证真实来源，把真实链接放进 references 数组；**严禁编造参考文献或数据**，查不到就如实说明或不写。
+- 【配图】需要配图的页给 image_query（配图关键词），工具会自动联网搜图并嵌入、在图下标注来源 URL；不要自己编图片地址。视频不内置，可在要点里附视频链接+出处。
+- 信息只用用户提供、信息库或联网查证到的事实。生成后简要说明页数与配图/引用情况。`
+  },
+  {
+    id: 'format',
+    name: '办公文档格式标准化',
+    when: '用户上传 Word/Excel 并要求按某套（企业统一）格式规范统一排版 / 套标准 / 调格式，或提供了格式模板要求照此调整。',
+    guide: `用 standardize_format 工具一键标准化（支持 .docx / .xlsx）：
+- 先把用户描述的规范解析成结构化参数填进 spec：cnFont(中文字体)、enFont(西文字体)、bodySize(正文字号pt)、lineSpacing(行距倍数)、firstLineIndent(首行缩进2字符)、margins(页边距厘米 top/bottom/left/right)、headings(各级标题 level/font/size/bold)、Excel 的 headerBold/borders/colWidth。
+- 若用户给了「格式模板」文件，把模板的 file_id 传 template_file_id，直接套用模板样式（最一致）。
+- 走样式层统一，覆盖面大；但复杂/异常文档无法保证 100% 零误差——工具会回报「已应用规则」和「未能处理项」，把未处理项如实转告用户复核，不要谎称完美无误。`
   }
 ]
 

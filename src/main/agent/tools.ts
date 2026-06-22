@@ -9,6 +9,8 @@ import { summarizeFile } from '../engine/filecontent'
 import { extractSheet, previewSheet } from '../engine/sheet'
 import { webSearch, fetchPageText } from '../engine/websearch'
 import { CONTRACT_CHECKLIST } from '../engine/legal'
+import { createPptx, type PptxSpec } from '../engine/pptx'
+import { standardizeFormat, extractDocxStyles, type FormatSpec } from '../engine/format'
 
 export interface AgentFile {
   id: string
@@ -243,6 +245,82 @@ export const TOOL_SPECS = [
   {
     type: 'function',
     function: {
+      name: 'create_pptx',
+      description:
+        '一键生成可编辑的 PPT(.pptx)。用户给主题/要求后，先用 web_search 查证真实资料与参考文献(只放真实URL,不编造)，再调用本工具。每页可给 image_query 自动联网配图并标注来源。生成的 PPT 文本/图片均可在 PowerPoint/WPS 继续编辑。',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: '文件名(不含扩展名)' },
+          title: { type: 'string', description: '封面主标题' },
+          subtitle: { type: 'string', description: '封面副标题(主题/单位/日期等，可选)' },
+          slides: {
+            type: 'array',
+            description: '内容页，每页一个对象',
+            items: {
+              type: 'object',
+              properties: {
+                title: { type: 'string', description: '本页小标题' },
+                bullets: { type: 'array', items: { type: 'string' }, description: '本页要点(3~6 条，精炼)' },
+                body: { type: 'string', description: '若不用要点可给整段正文(可选)' },
+                image_query: { type: 'string', description: '配图关键词(可选)，工具自动联网搜图并嵌入+标来源' },
+                notes: { type: 'string', description: '讲者备注(可选)' }
+              }
+            }
+          },
+          references: { type: 'array', items: { type: 'string' }, description: '真实参考文献(带URL)，须经联网查证，勿编造' }
+        },
+        required: ['filename', 'title', 'slides']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'standardize_format',
+      description:
+        '把上传的 Word(.docx)/Excel(.xlsx) 按企业统一格式规范一键标准化(字体/字号/行距/首行缩进/页边距/各级标题/表头/边框/列宽)。也可提供格式模板文件直接套用其样式。复杂文档不保证零误差，会回报已应用与未处理项。',
+      parameters: {
+        type: 'object',
+        properties: {
+          file_id: { type: 'string', description: '要标准化的文件 id' },
+          template_file_id: { type: 'string', description: '可选：作为格式模板的 docx 文件 id，套用其样式' },
+          spec: {
+            type: 'object',
+            description: '格式规范(把用户描述解析进来)',
+            properties: {
+              cnFont: { type: 'string', description: '中文字体，如 仿宋_GB2312 / 宋体 / 微软雅黑' },
+              enFont: { type: 'string', description: '西文/数字字体，如 Times New Roman' },
+              bodySize: { type: 'number', description: '正文字号(pt)，如 14(三号)、16(小三)' },
+              lineSpacing: { type: 'number', description: '行距倍数，如 1.5 / 2' },
+              firstLineIndent: { type: 'boolean', description: '正文首行缩进 2 字符' },
+              margins: {
+                type: 'object',
+                description: '页边距(厘米)',
+                properties: { top: { type: 'number' }, bottom: { type: 'number' }, left: { type: 'number' }, right: { type: 'number' } }
+              },
+              headings: {
+                type: 'array',
+                description: '各级标题样式',
+                items: {
+                  type: 'object',
+                  properties: { level: { type: 'number' }, font: { type: 'string' }, size: { type: 'number' }, bold: { type: 'boolean' } },
+                  required: ['level']
+                }
+              },
+              headerBold: { type: 'boolean', description: 'Excel：首行表头加粗' },
+              borders: { type: 'boolean', description: 'Excel：全表加表格线' },
+              colWidth: { type: 'number', description: 'Excel：统一列宽' }
+            }
+          }
+        },
+        required: ['file_id']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'pdf_merge',
       description: '把多个 PDF 按给定顺序合并成一个。',
       parameters: {
@@ -386,6 +464,29 @@ export async function dispatchTool(name: string, args: any, ctx: AgentCtx): Prom
       }
       const focus = args.focus ? `\n用户特别关注：${args.focus}` : ''
       return `【合同文件：${f.name}】\n${content.slice(0, 8000)}${focus}\n\n${CONTRACT_CHECKLIST}`
+    }
+    case 'create_pptx': {
+      ctx.progress(`制作 PPT：${args.title || args.filename || ''}`)
+      const { files, report } = await createPptx(args as PptxSpec)
+      const out = files.map((f) => register(ctx, f.name, Buffer.from(f.base64, 'base64')))
+      return `${report} 文件：${out.map((f) => `${f.name}(${f.id})`).join('、')}`
+    }
+    case 'standardize_format': {
+      const f = getFile(ctx, args.file_id)
+      ctx.progress(`标准化格式 ${f.name}`)
+      const ext = extOf(f.name)
+      let templateStyles: string | undefined
+      if (args.template_file_id) {
+        const tf = getFile(ctx, args.template_file_id)
+        if (extOf(tf.name) === 'docx') templateStyles = await extractDocxStyles(tf.buf)
+      }
+      const res = await standardizeFormat(f.buf, ext, (args.spec || {}) as FormatSpec, templateStyles)
+      const base = f.name.replace(/\.[^.]+$/, '')
+      const g = register(ctx, `${base}-标准化.${res.ext}`, Buffer.from(res.base64, 'base64'))
+      return (
+        `已生成 ${g.name}(${g.id})。已应用：${res.applied.join('；') || '(无)'}` +
+        (res.skipped.length ? `。未能处理(请复核)：${res.skipped.join('；')}` : '')
+      )
     }
     case 'pdf_merge': {
       const ids: string[] = args.file_ids || []

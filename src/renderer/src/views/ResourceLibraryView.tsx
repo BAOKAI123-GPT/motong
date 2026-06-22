@@ -98,6 +98,18 @@ const CATALOG: Group[] = [
         desc: '上传聊天记录截图或单据照片，逐字转录金额 / 数量 / 规格 / 单号后据此处理，不臆造数字。',
         license: '视觉模型 · 内置',
         status: 'builtin'
+      },
+      {
+        name: 'PPT 一键制作',
+        desc: '说清主题与要求，自动生成可编辑 .pptx（封面 / 要点 / 参考文献页）；参考文献联网查证真实来源、配图自动联网并标注出处。',
+        license: 'gpt-4o + 联网 · 内置',
+        status: 'builtin'
+      },
+      {
+        name: '办公文档格式标准化',
+        desc: '上传 Word / Excel + 一套格式规范（或模板文件），一键统一字体 / 字号 / 行距 / 页边距 / 标题 / 表头边框；会回报已应用与需复核项。',
+        license: '内置 · 样式层标准化',
+        status: 'builtin'
       }
     ]
   },
