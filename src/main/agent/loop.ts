@@ -4,6 +4,7 @@ import { memoryContext } from '../memory'
 import { summarizeFile } from '../engine/filecontent'
 import { TOOL_SPECS, dispatchTool, type AgentCtx, type AgentFile } from './tools'
 import { getConvFiles, addUploads, addGenerated } from './filecache'
+import { skillsSystemBlock } from './skills'
 import type { WsQuota } from '../../shared/types'
 
 export interface AgentInput {
@@ -110,7 +111,7 @@ export async function runAgent(
   const system: RawMessage = {
     role: 'system',
     content:
-      `${SYSTEM}\n\n【企业信息库】\n${infoText}` +
+      `${SYSTEM}\n\n${skillsSystemBlock()}\n\n【企业信息库】\n${infoText}` +
       (memText ? `\n\n【长期记忆】（用户保存的、可参考）\n${memText}` : '') +
       (fileLines.length
         ? `\n\n【对话中的文件】（本对话里上传或生成过的文件，可按 id 用 read_file 读取后处理；用户说"刚才那个文件"通常指其中之一）\n${fileLines.join('\n')}`

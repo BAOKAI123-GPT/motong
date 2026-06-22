@@ -112,7 +112,7 @@ export const TOOL_SPECS = [
             description: '表头列',
             items: {
               type: 'object',
-              properties: { header: { type: 'string' }, width: { type: 'number' } },
+              properties: { header: { type: 'string' }, width: { type: 'number' }, rtl: { type: 'boolean', description: '该列文字从右到左(阿拉伯语等)，设 true 则右对齐、RTL 阅读顺序；用于多语对照表的阿语列' } },
               required: ['header']
             }
           },
@@ -213,7 +213,7 @@ export const TOOL_SPECS = [
     function: {
       name: 'contract_review',
       description:
-        '审查一份合同/协议（Word/Excel/文本）。会读取合同内容并附上外贸购销合同审查要点，请据此逐条指出缺失项、风险点(高/中/低)与修改建议。',
+        '审查各类合同/协议（外贸购销、采购、服务、租赁、劳动、保密 NDA 等；Word/Excel/文本）。会读取合同内容并附上审查要点，请据此逐条指出缺失项、风险点(高/中/低)与修改建议。',
       parameters: {
         type: 'object',
         properties: {

@@ -13,8 +13,8 @@ export interface SpreadsheetSpec {
   /** 标题下的信息块：左右两栏文本行（发货方/收货方、单号日期等） */
   infoLeft?: string[]
   infoRight?: string[]
-  /** 表头列 */
-  columns: { header: string; width?: number }[]
+  /** 表头列。rtl=true 的列文字从右到左（阿拉伯语等），单元格右对齐、RTL 阅读顺序 */
+  columns: { header: string; width?: number; rtl?: boolean }[]
   /** 数据行，每行按列顺序给值 */
   rows: (string | number)[][]
   /** 合计行（可选，按列对齐） */
@@ -98,7 +98,11 @@ function buildWorkbook(spec: SpreadsheetSpec): ExcelJS.Workbook {
       const c = ws.getCell(r, i + 1)
       c.value = (row[i] ?? '') as ExcelJS.CellValue
       c.border = BORDER
-      c.alignment = { vertical: 'middle', wrapText: true }
+      // 阿拉伯语等 RTL 列：右对齐 + 从右到左阅读顺序，使多语对照表显示正确
+      const align: Partial<ExcelJS.Alignment> = spec.columns[i]?.rtl
+        ? { vertical: 'middle', wrapText: true, horizontal: 'right', readingOrder: 'rtl' }
+        : { vertical: 'middle', wrapText: true }
+      c.alignment = align
     }
   }
 
