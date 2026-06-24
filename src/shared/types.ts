@@ -249,17 +249,22 @@ export interface WsQuota {
   phone?: string
   active: boolean
   tier: string
-  weekTokens: number
-  weekResetAt: string | null
+  memberCredits: number // 会员当月剩余次
+  bonusCredits: number // 邀请赠送次
+  freeRemaining: number // 今日免费剩余次
+  freeDaily: number // 每日免费次配额
   expiresAt: string | null
   canUse: boolean
+  source?: string | null
+  inviteCode?: string
+  inviteCount?: number
 }
 
 export interface WsTier {
   id: string
   name: string
   priceCents: number
-  weekTokens: number
+  monthCount: number // 每月可用「次」
 }
 
 export interface AuthState {

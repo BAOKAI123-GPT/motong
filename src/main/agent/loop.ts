@@ -146,9 +146,10 @@ export async function runAgent(
   }
 
   let nudged = false // "空头承诺"兜底只补一次，防止无限循环
+  const runId = crypto.randomUUID() // 整轮共用：后端「一轮只扣 1 次」（按次计费）
   for (let step = 0; step < MAX_STEPS; step++) {
     onProgress(step === 0 ? '正在理解需求…' : '正在继续处理…')
-    const res = await chatRaw(messages, TOOL_SPECS, crypto.randomUUID())
+    const res = await chatRaw(messages, TOOL_SPECS, crypto.randomUUID(), runId)
     if (res.needLogin) return { ok: false, needLogin: true, error: res.error || '请先登录' }
     if (res.scopeBlocked)
       return { ok: false, scopeBlocked: true, text: res.error, files: filesOut() }

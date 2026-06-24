@@ -118,13 +118,15 @@ function contentText(content: unknown): string {
 export async function chatRaw(
   messages: RawMessage[],
   tools?: unknown[],
-  reqId?: string
+  reqId?: string,
+  runId?: string
 ): Promise<ChatRawResult> {
   // agent 对话耗时较长（后端最长 ~90s 即返回结构化结果）：客户端超时给 100s（略高于后端，<网关上限），
   // 并对快速网络抖动重试 1 次——reqId 幂等，重试不会重复扣费。
+  // runId：一整轮 agent run 的标识（多步共用），后端据此「一轮只扣 1 次」（按次计费）。
   const r = await apiFetch(
     '/api/agent/chat',
-    { method: 'POST', body: JSON.stringify({ messages, tools, reqId }) },
+    { method: 'POST', body: JSON.stringify({ messages, tools, reqId, runId }) },
     { timeoutMs: 100000, retries: 1 }
   )
   const d: any = r.data || {}

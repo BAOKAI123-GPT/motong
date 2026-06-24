@@ -123,12 +123,12 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
             </div>
           </div>
           <div>
-            <div className="text-xs text-muted">本周剩余额度</div>
-            <div className="text-lg font-semibold">{active ? `${wan(q!.weekTokens)} token` : '—'}</div>
+            <div className="text-xs text-muted">剩余次数</div>
+            <div className="text-lg font-semibold">{active ? `${q!.memberCredits} 次` : `今日免费 ${q?.freeRemaining ?? 0}/${q?.freeDaily ?? 0} 次`}</div>
           </div>
           <div>
-            <div className="text-xs text-muted">额度刷新</div>
-            <div className="text-sm">{active ? fmtDate(q!.weekResetAt) : '—'}</div>
+            <div className="text-xs text-muted">赠送次数</div>
+            <div className="text-sm">{q?.bonusCredits ? `${q.bonusCredits} 次` : '—'}</div>
           </div>
           <div>
             <div className="text-xs text-muted">到期</div>
@@ -136,10 +136,10 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
           </div>
         </div>
         {!active && (
-          <p className="mt-3 text-sm text-muted">还没开通会员。选择下面的套餐开通后即可使用对话办公。</p>
+          <p className="mt-3 text-sm text-muted">未开通会员时可用每日免费次数；开通套餐得更多「次」（1 次 = 一份文档任务）。</p>
         )}
-        {active && q!.weekTokens <= 0 && (
-          <p className="mt-3 text-sm text-amber-700">本周额度已用完，下周自动恢复；急用可升级更高套餐。</p>
+        {active && q!.memberCredits <= 0 && (
+          <p className="mt-3 text-sm text-amber-700">本月次数已用完；可升级更高套餐、邀请好友得次数，或用每日免费额度。</p>
         )}
       </div>
 
@@ -192,10 +192,10 @@ export default function AccountView({ onLoggedOut }: { onLoggedOut: () => void }
             >
               <div className="text-base font-semibold">{t.name}</div>
               <div className="mt-2 text-2xl font-bold">
-                ¥{(t.priceCents / 100).toFixed(0)}
+                ¥{(t.priceCents / 100).toFixed(t.priceCents % 100 === 0 ? 0 : 1)}
                 <span className="text-xs font-normal text-muted"> /月</span>
               </div>
-              <div className="mt-1 text-xs text-muted">每周 {wan(t.weekTokens)} token（不结转）</div>
+              <div className="mt-1 text-xs text-muted">每月 {t.monthCount} 次文档任务</div>
               <div className="flex-1" />
               <button
                 onClick={() => recharge(t.id)}

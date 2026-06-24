@@ -262,7 +262,7 @@ export default function ChatView({
           title="查看套餐与额度"
           className="rounded-full border border-edge px-2.5 py-1 text-[11px] text-muted hover:text-slate-700"
         >
-          {quota?.active ? `本周剩余 ${wan(quota.weekTokens)} token` : '未开通 · 去开通'}
+          {quota?.active ? `剩余 ${quota.memberCredits} 次` : `今日免费 ${quota?.freeRemaining ?? 0}/${quota?.freeDaily ?? 0} 次`}
         </button>
       </div>
 
