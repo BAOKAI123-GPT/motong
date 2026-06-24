@@ -32,8 +32,11 @@ export const SKILLS: Skill[] = [
   {
     id: 'office',
     name: '办公文书写作',
-    when: '用户要写或整理常见办公/行政文书：通知、公告、会议纪要、规章制度、商务函件、工作总结、产品/公司资料等。',
-    guide: `按正式公文 / 商务文书规范撰写：结构清晰（标题、正文、落款/日期）、措辞得体专业、信息只用用户提供或信息库里的事实。需要交付成可下载文件时，先生成内容再用 convert_format 导出为 Word/PDF 等。`
+    when: '用户要写或整理常见办公/行政文书：通知、公告、会议纪要、规章制度、商务函件、工作总结、方案说明、产品介绍/亮点、公司资料等（以文字段落为主的文档）。',
+    guide: `按正式公文 / 商务文书规范撰写：结构清晰（标题、正文、落款/日期）、措辞得体专业、信息只用用户提供或信息库里的事实。
+- 【交付成文件用 create_document】把内容拆成 blocks（heading 小标题 / paragraph 段落 / bullets 要点 / ordered 步骤 / table 表格 / quote 引用），调 create_document 一次性产出 Word(.docx) 和 PDF（默认两种都给；用户只要其一就在 formats 里指定）。PDF 由内置引擎渲染、中文正常、无需 LibreOffice。
+- **绝不要用 create_spreadsheet 来做"文字类文档"**（那是做送货单/报价单等表格单据的）；也不要因为没有文件就用 convert_format 凭空"导出"——文字文档一律走 create_document。
+- 不要把正文当作聊天文字贴出来后就说"已生成 PDF"；必须真的调 create_document 产出文件，文件会自动附在回复里供下载。`
   },
   {
     id: 'ppt',

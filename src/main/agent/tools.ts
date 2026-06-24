@@ -11,6 +11,7 @@ import { webSearch, fetchPageText } from '../engine/websearch'
 import { CONTRACT_CHECKLIST } from '../engine/legal'
 import { createPptx, type PptxSpec } from '../engine/pptx'
 import { standardizeFormat, extractDocxStyles, type FormatSpec } from '../engine/format'
+import { buildDocHtml, htmlToPdf, buildDocx, type DocSpec } from '../engine/document'
 
 export interface AgentFile {
   id: string
@@ -150,9 +151,50 @@ export const TOOL_SPECS = [
   {
     type: 'function',
     function: {
+      name: 'create_document',
+      description:
+        '把你整理好的文字内容生成为可下载的正式文档（Word .docx 和/或 PDF）。用于"以文字段落为主"的文档：产品介绍/亮点、公司资料、通知公告、会议纪要、规章制度、商务函件、工作总结、方案说明等。PDF 由内置引擎直接渲染（中文正常、无需安装 LibreOffice）。注意：这是写"文章/文档"，不是表格单据——送货单/报价单/对账单等表格请用 create_spreadsheet。',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: '文件名（不含扩展名），如 产品亮点介绍' },
+          title: { type: 'string', description: '文档大标题（居中显示在首行）' },
+          formats: {
+            type: 'array',
+            items: { type: 'string', enum: ['pdf', 'docx'] },
+            description: '要产出的格式，默认两种都给 ["pdf","docx"]'
+          },
+          blocks: {
+            type: 'array',
+            description: '文档内容块，按显示顺序排列',
+            items: {
+              type: 'object',
+              properties: {
+                type: {
+                  type: 'string',
+                  enum: ['heading', 'paragraph', 'bullets', 'ordered', 'table', 'quote'],
+                  description: 'heading=小标题 / paragraph=正文段落 / bullets=无序要点 / ordered=有序步骤 / table=表格 / quote=引用强调'
+                },
+                level: { type: 'number', description: 'heading 级别 1-3' },
+                text: { type: 'string', description: 'heading/paragraph/quote 的文字（段内换行用 \\n）' },
+                items: { type: 'array', items: { type: 'string' }, description: 'bullets/ordered 的条目数组' },
+                headers: { type: 'array', items: { type: 'string' }, description: 'table 的表头' },
+                rows: { type: 'array', items: { type: 'array', items: { type: 'string' } }, description: 'table 的数据行（每行一个字符串数组）' }
+              },
+              required: ['type']
+            }
+          }
+        },
+        required: ['filename', 'blocks']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
       name: 'convert_format',
       description:
-        '把某个文件转换成另一种格式：Excel↔CSV/JSON/HTML、以及 Word/PDF/PPT/WPS 等互转（文档/PDF 类需要 LibreOffice）。',
+        '把某个【已存在的文件】转换成另一种格式：Excel↔CSV/JSON/HTML、以及 Word/PDF/PPT/WPS 等互转（文档/PDF 类需要 LibreOffice）。注意：只能转换已上传/已生成的文件(需 file_id)；若是把你写的文字做成 Word/PDF，请用 create_document，不要用本工具。',
       parameters: {
         type: 'object',
         properties: {
@@ -391,6 +433,32 @@ export async function dispatchTool(name: string, args: any, ctx: AgentCtx): Prom
       const files = await createSpreadsheet(spec)
       const out = files.map((f) => register(ctx, f.name, Buffer.from(f.base64, 'base64')))
       return `已生成：${out.map((f) => `${f.name}(${f.id})`).join('、')}`
+    }
+    case 'create_document': {
+      const spec = args as DocSpec & { filename?: string; formats?: string[] }
+      const base =
+        String(spec.filename || spec.title || '文档').replace(/[\\/:*?"<>|]/g, '').slice(0, 90) || '文档'
+      ctx.progress(`生成文档：${spec.title || base}`)
+      const fmts = Array.isArray(spec.formats) && spec.formats.length ? spec.formats : ['pdf', 'docx']
+      const out: AgentFile[] = []
+      let pdfErr = ''
+      if (fmts.includes('docx')) {
+        const buf = await buildDocx(spec)
+        out.push(register(ctx, `${base}.docx`, buf))
+      }
+      if (fmts.includes('pdf')) {
+        try {
+          const buf = await htmlToPdf(buildDocHtml(spec))
+          out.push(register(ctx, `${base}.pdf`, buf))
+        } catch (e: unknown) {
+          pdfErr = e instanceof Error ? e.message : String(e)
+        }
+      }
+      if (!out.length) return `生成文档失败：${pdfErr || '未指定有效格式(pdf/docx)'}`
+      return (
+        `已生成：${out.map((f) => `${f.name}(${f.id})`).join('、')}` +
+        (pdfErr ? `（PDF 生成失败：${pdfErr}；已提供 Word 版，可在 Word/WPS 里另存为 PDF）` : '')
+      )
     }
     case 'convert_format': {
       const f = getFile(ctx, args.file_id)
