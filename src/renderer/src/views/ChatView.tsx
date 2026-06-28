@@ -49,6 +49,8 @@ export default function ChatView({
   const [attachments, setAttachments] = useState<DroppedFile[]>([])
   const [quoted, setQuoted] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [deliver, setDeliver] = useState('')
+  const [deliverCustom, setDeliverCustom] = useState('')
   const [progress, setProgress] = useState('')
   const [quota, setQuota] = useState<WsQuota | null>(null)
   const [over, setOver] = useState(false)
@@ -161,7 +163,8 @@ export default function ChatView({
     setBusy(true)
     setProgress('正在思考…')
     try {
-      const r = await window.api.agent.send({ profileId: '', convId: cid, history, userText: text, files })
+      const deliveryFormat = deliver === '__custom' ? deliverCustom.trim() : deliver
+      const r = await window.api.agent.send({ profileId: '', convId: cid, history, userText: text, files, deliveryFormat })
       if (r.quota) setQuota(r.quota)
       if (r.needLogin) {
         toast.err('登录已过期，请重新登录')
@@ -352,6 +355,15 @@ export default function ChatView({
               ))}
             </div>
           )}
+          <div className="mb-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted">交付为</span>
+            {[{ v: '', l: '自动' }, { v: 'docx', l: 'Word' }, { v: 'pdf', l: 'PDF' }, { v: 'xlsx', l: 'Excel' }, { v: 'pptx', l: 'PPT' }, { v: 'text', l: '纯文本' }, { v: '__custom', l: '其他' }].map((d) => (
+              <button key={d.v} onClick={() => setDeliver(d.v)} className={`rounded-full border px-2.5 py-0.5 text-xs ${deliver === d.v ? 'border-brand bg-brand/15 text-brand' : 'border-edge text-muted hover:text-slate-900'}`}>{d.l}</button>
+            ))}
+            {deliver === '__custom' && (
+              <input value={deliverCustom} onChange={(e) => setDeliverCustom(e.target.value)} placeholder="想要的格式，如 长图/网页/Markdown" className="min-w-[120px] flex-1 rounded-lg border border-edge bg-panel px-2 py-1 text-xs text-slate-800 focus:outline-none" />
+            )}
+          </div>
           <div className="flex items-end gap-2 rounded-xl border border-edge bg-panel/60 px-3 py-2 focus-within:border-brand/60">
             <button
               onClick={() => fileRef.current?.click()}

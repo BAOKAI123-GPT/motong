@@ -223,6 +223,8 @@ export interface AgentSendInput {
   userText: string
   /** 本轮上传的文件 */
   files: DroppedFile[]
+  /** 用户指定交付形式：text/docx/pdf/xlsx/pptx/或自由文本；空=AI 自行判断 */
+  deliveryFormat?: string
 }
 
 export interface GeneratedFilePayload {

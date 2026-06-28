@@ -75,6 +75,88 @@ function applyRPr(doc: any, rPr: any, spec: { cnFont?: string; enFont?: string; 
   if (spec.bold) ensureChild(doc, rPr, 'w:b')
 }
 
+// 「优化排版」默认美化档：用户只说"优化/整理排版"而没给具体规范时套用，避免空 spec 变 no-op 把原件原样退回。
+const DEFAULT_BEAUTIFY: FormatSpec = {
+  cnFont: '宋体',
+  enFont: 'Times New Roman',
+  lineSpacing: 1.5,
+  firstLineIndent: true,
+  margins: { top: 2.54, bottom: 2.54, left: 3.18, right: 3.18 },
+  headings: [
+    { level: 1, font: '黑体', size: 16, bold: true },
+    { level: 2, font: '黑体', size: 15, bold: true },
+    { level: 3, font: '黑体', size: 14, bold: true }
+  ],
+  headerBold: true,
+  borders: true
+}
+function hasMeaningfulSpec(s: FormatSpec): boolean {
+  return !!(s.cnFont || s.enFont || s.bodySize || s.lineSpacing || s.firstLineIndent || s.margins ||
+    (s.headings && s.headings.length) || s.headerBold || s.borders || s.colWidth)
+}
+
+// ---- document.xml 级覆写（Word 文档字体/字号多写在 run 直接格式上、会盖过 docDefaults，只改 docDefaults 往往"看不出变化"。这里逐段落/逐 run 落实才真正生效。） ----
+function pStyleId(p: any): string {
+  const pPr = child(p, 'w:pPr'); if (!pPr) return ''
+  const ps = child(pPr, 'w:pStyle'); if (!ps) return ''
+  return ps.getAttribute('w:val') || ps.getAttribute('val') || ''
+}
+function isHeadingStyle(id: string): boolean {
+  return /heading\s*[1-9]/i.test(id) || /^标题/.test(id) || /^[1-9]$/.test(id)
+}
+function isCentered(p: any): boolean {
+  const pPr = child(p, 'w:pPr'); if (!pPr) return false
+  const jc = child(pPr, 'w:jc'); return !!jc && (jc.getAttribute('w:val') === 'center' || jc.getAttribute('val') === 'center')
+}
+function ensureRPrFirst(doc: any, r: any): any {
+  let rPr = child(r, 'w:rPr')
+  if (!rPr) { rPr = doc.createElementNS(W, 'w:rPr'); r.insertBefore(rPr, r.firstChild) }
+  return rPr
+}
+function processDocumentXml(doc: any, spec: FormatSpec, applied: string[]): void {
+  const paras = doc.getElementsByTagName('w:p')
+  let fontRuns = 0
+  let bodyParas = 0
+  for (let i = 0; i < paras.length; i++) {
+    const p = paras[i]
+    const heading = isHeadingStyle(pStyleId(p))
+    if (!heading) {
+      if (spec.lineSpacing || spec.firstLineIndent) {
+        const pPr = ensureChild(doc, p, 'w:pPr', true)
+        if (spec.lineSpacing) {
+          const sp = ensureChild(doc, pPr, 'w:spacing')
+          setAttr(sp, 'w:line', String(mul2line(spec.lineSpacing)))
+          setAttr(sp, 'w:lineRule', 'auto')
+        }
+        if (spec.firstLineIndent && !isCentered(p)) {
+          const ind = ensureChild(doc, pPr, 'w:ind')
+          setAttr(ind, 'w:firstLineChars', '200')
+          setAttr(ind, 'w:firstLine', String(pt2hp(spec.bodySize || 14) * 10))
+        }
+        bodyParas++
+      }
+      if (spec.cnFont || spec.enFont || spec.bodySize) {
+        const runs = p.getElementsByTagName('w:r')
+        for (let j = 0; j < runs.length; j++) {
+          const rPr = ensureRPrFirst(doc, runs[j])
+          if (spec.cnFont || spec.enFont) {
+            const rf = ensureChild(doc, rPr, 'w:rFonts', true)
+            if (spec.enFont) { setAttr(rf, 'w:ascii', spec.enFont); setAttr(rf, 'w:hAnsi', spec.enFont) }
+            if (spec.cnFont) setAttr(rf, 'w:eastAsia', spec.cnFont)
+          }
+          if (spec.bodySize) {
+            const sz = ensureChild(doc, rPr, 'w:sz'); setAttr(sz, 'w:val', String(pt2hp(spec.bodySize)))
+            const szCs = ensureChild(doc, rPr, 'w:szCs'); setAttr(szCs, 'w:val', String(pt2hp(spec.bodySize)))
+          }
+          fontRuns++
+        }
+      }
+    }
+  }
+  if (fontRuns) applied.push(`正文字体逐段落实到 ${fontRuns} 处文本（中文 ${spec.cnFont || '不变'} / 西文 ${spec.enFont || '不变'}）`)
+  if (bodyParas) applied.push(`正文 ${bodyParas} 段已套行距/首行缩进`)
+}
+
 async function standardizeDocx(buf: Buffer, spec: FormatSpec, templateStyles?: string): Promise<FormatResult> {
   const applied: string[] = []
   const skipped: string[] = []
@@ -139,27 +221,28 @@ async function standardizeDocx(buf: Buffer, spec: FormatSpec, templateStyles?: s
     }
   }
 
-  // 页边距（document.xml 的 sectPr/pgMar）
-  if (spec.margins) {
-    const docXml = await zip.file('word/document.xml')?.async('string')
-    if (docXml) {
-      const doc = new DOMParser().parseFromString(docXml, 'text/xml')
-      const sectPrs = doc.getElementsByTagName('w:sectPr')
+  // document.xml：① run/段落级覆写（真正生效，套模板时跳过）② 页边距(sectPr/pgMar)
+  const docXml = await zip.file('word/document.xml')?.async('string')
+  if (docXml) {
+    const ddoc = new DOMParser().parseFromString(docXml, 'text/xml')
+    if (!templateStyles) processDocumentXml(ddoc, spec, applied)
+    if (spec.margins) {
+      const sectPrs = ddoc.getElementsByTagName('w:sectPr')
       if (sectPrs.length) {
         const m = spec.margins
         for (let i = 0; i < sectPrs.length; i++) {
-          const pgMar = ensureChild(doc, sectPrs[i], 'w:pgMar')
+          const pgMar = ensureChild(ddoc, sectPrs[i], 'w:pgMar')
           if (m.top != null) setAttr(pgMar, 'w:top', String(cm2tw(m.top)))
           if (m.bottom != null) setAttr(pgMar, 'w:bottom', String(cm2tw(m.bottom)))
           if (m.left != null) setAttr(pgMar, 'w:left', String(cm2tw(m.left)))
           if (m.right != null) setAttr(pgMar, 'w:right', String(cm2tw(m.right)))
         }
-        zip.file('word/document.xml', new XMLSerializer().serializeToString(doc))
         applied.push(`页边距(cm)：上${m.top ?? '-'} 下${m.bottom ?? '-'} 左${m.left ?? '-'} 右${m.right ?? '-'}`)
       } else {
         skipped.push('文档无 sectPr，跳过页边距')
       }
     }
+    zip.file('word/document.xml', new XMLSerializer().serializeToString(ddoc))
   }
 
   const out = await zip.generateAsync({ type: 'nodebuffer' })
@@ -203,8 +286,10 @@ export async function standardizeFormat(
   templateStyles?: string
 ): Promise<FormatResult> {
   const e = ext.toLowerCase()
-  if (e === 'docx') return standardizeDocx(buf, spec, templateStyles)
-  if (e === 'xlsx') return standardizeXlsx(buf, spec)
+  // 无模板且用户没给规范 → 套默认美化档，避免"优化排版"变 no-op 把原件原样退回。
+  const merged: FormatSpec = templateStyles || hasMeaningfulSpec(spec) ? spec : { ...DEFAULT_BEAUTIFY }
+  if (e === 'docx') return standardizeDocx(buf, merged, templateStyles)
+  if (e === 'xlsx') return standardizeXlsx(buf, merged)
   throw new Error(`暂不支持的格式：.${ext}（目前支持 Word .docx 与 Excel .xlsx）`)
 }
 

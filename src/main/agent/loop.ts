@@ -14,6 +14,16 @@ export interface AgentInput {
   history: { role: 'user' | 'assistant'; content: string }[]
   userText: string
   files: { name: string; base64: string }[]
+  /** 用户指定交付形式：text/docx/pdf/xlsx/pptx/或自由文本；空=AI 自行判断 */
+  deliveryFormat?: string
+}
+
+// 把用户指定的交付形式转成给模型的硬约束（空则不约束）。
+function deliveryHint(fmt?: string): string {
+  if (!fmt) return ''
+  const map: Record<string, string> = { text: '纯文本（直接在回复里给，不必出文件）', docx: 'Word 文档(.docx)', pdf: 'PDF', xlsx: 'Excel 表格(.xlsx)', pptx: 'PPT 演示文稿(.pptx)' }
+  const label = map[fmt] || fmt
+  return `\n\n【本轮交付形式】用户明确要求交付为：${label}。请严格据此选工具产出可下载文件：docx/pdf→create_document、xlsx→create_spreadsheet 或 extract_sheet、pptx→create_pptx、纯文本→直接回复文字不出文件。优先满足用户指定的形式。`
 }
 
 export interface AgentOutput {
@@ -117,7 +127,8 @@ export async function runAgent(
       (memText ? `\n\n【长期记忆】（用户保存的、可参考）\n${memText}` : '') +
       (fileLines.length
         ? `\n\n【对话中的文件】（这些文件已在系统中、可直接按 id 用 read_file 读取，切勿让用户重新上传；上传件 id 以 u 开头、生成件以 g 开头；用户说"刚才那个文件"通常指其中之一）\n${fileLines.join('\n')}`
-        : '')
+        : '') +
+      deliveryHint(input.deliveryFormat)
   }
 
   const history: RawMessage[] = input.history
