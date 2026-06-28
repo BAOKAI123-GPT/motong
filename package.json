@@ -1,6 +1,6 @@
 {
   "name": "motong",
-  "version": "0.6.13",
+  "version": "0.6.14",
   "description": "墨童 · AI 文员 — 承子夏文脉的对话式文书办公：发需求/聊天记录/表格，AI 自动建表、套模板、转格式并回传文件",
   "main": "./out/main/index.js",
   "author": "WenshuAssist",

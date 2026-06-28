@@ -1,6 +1,11 @@
+import { randomUUID } from 'node:crypto'
 import { apiFetch } from './account'
 import { normalizeBaseUrl } from '../shared/url'
 import type { ModelInfo, ScanModelsResult, WsQuota } from '../shared/types'
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 function authHeaders(apiKey: string): Record<string, string> {
   return { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
@@ -121,20 +126,50 @@ export async function chatRaw(
   reqId?: string,
   runId?: string
 ): Promise<ChatRawResult> {
-  // agent 对话耗时较长（后端最长 ~90s 即返回结构化结果）：客户端超时给 100s（略高于后端，<网关上限），
-  // 并对快速网络抖动重试 1 次——reqId 幂等，重试不会重复扣费。
-  // runId：一整轮 agent run 的标识（多步共用），后端据此「一轮只扣 1 次」（按次计费）。
-  const r = await apiFetch(
+  // 异步「提交→轮询」：把每一步 LLM 调用从「一条长连接死等到底」改为「秒回 reqId + 短轮询」，
+  // 避免长 POST 被网关/线路掐断（桌面"连不上服务器"根治）。工具仍在本机执行、本地循环不变。
+  // runId：一整轮 agent run 标识（多步共用），后端据此「一轮只扣 1 次」；reqId 幂等，重试不重复扣费。
+  const rid = reqId || randomUUID()
+  // 1) 提交（短请求，秒回 202+reqId）
+  const sub = await apiFetch(
     '/api/agent/chat',
-    { method: 'POST', body: JSON.stringify({ messages, tools, reqId, runId }) },
-    { timeoutMs: 100000, retries: 1 }
+    { method: 'POST', body: JSON.stringify({ messages, tools, reqId: rid, runId, async: true }) },
+    { timeoutMs: 30000, retries: 1 }
   )
-  const d: any = r.data || {}
-  if (r.status === 401) return { ok: false, needLogin: true, error: d.error || '请先登录' }
-  if (r.status === 402) return { ok: false, needRecharge: true, quota: d.quota, error: d.error }
-  if (r.status === 400 && d.scopeBlocked) return { ok: false, scopeBlocked: true, error: d.error }
-  if (!r.ok || !d.ok || !d.message) return { ok: false, error: d.error || `请求失败 (${r.status})` }
-  return { ok: true, message: d.message, quota: d.quota }
+  const sd: any = sub.data || {}
+  if (sub.status === 401) return { ok: false, needLogin: true, error: sd.error || '请先登录' }
+  if (sub.status === 402) return { ok: false, needRecharge: true, quota: sd.quota, error: sd.error }
+  if (sub.status === 400 && sd.scopeBlocked) return { ok: false, scopeBlocked: true, error: sd.error }
+  if (sub.status === 429) return { ok: false, error: sd.error || '上一条还在处理中，请稍候' }
+  // 兼容老后端（不认 async → 同步返回完整结果），直接用
+  if (sub.status === 200 && sd.ok && sd.message) return { ok: true, message: sd.message, quota: sd.quota }
+  if (sub.status !== 202 || !sd.reqId) return { ok: false, error: sd.error || `请求失败 (${sub.status})` }
+
+  // 2) 轮询结果（每 2s；单步 LLM 通常 <30s，上限 150s）
+  const POLL_MS = 2000
+  const MAX_MS = 150000
+  const start = Date.now()
+  while (Date.now() - start < MAX_MS) {
+    await sleep(POLL_MS)
+    const st = await apiFetch(
+      '/api/agent/chat/status',
+      { method: 'POST', body: JSON.stringify({ reqId: rid }) },
+      { timeoutMs: 30000, retries: 1 }
+    )
+    const td: any = st.data || {}
+    if (st.status === 401) return { ok: false, needLogin: true, error: td.error || '请先登录' }
+    if (st.status !== 200) continue // 瞬时网络抖动 → 继续轮询（短请求，下次大概率成功）
+    if (td.state === 'running') continue
+    if (td.state === 'missing') return { ok: false, error: '任务丢失，请重试' }
+    // state === 'done'：解析后台任务的最终结果
+    const o: any = td.out || {}
+    const ob: any = o.body || {}
+    if (o.status === 402) return { ok: false, needRecharge: true, quota: ob.quota, error: ob.error }
+    if (o.status === 400 && ob.scopeBlocked) return { ok: false, scopeBlocked: true, error: ob.error }
+    if (o.status !== 200 || !ob.ok || !ob.message) return { ok: false, error: ob.error || `请求失败 (${o.status})` }
+    return { ok: true, message: ob.message, quota: ob.quota }
+  }
+  return { ok: false, error: 'AI 处理超时，请重试' }
 }
 
 /** 简单对话补全（模板填充/记忆总结用），同样经后端计费 */
