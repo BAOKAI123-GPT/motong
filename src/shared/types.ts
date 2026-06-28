@@ -231,6 +231,8 @@ export interface GeneratedFilePayload {
   name: string
   /** base64（不含 data: 前缀） */
   base64: string
+  /** 云端文件 id（网页版生成、存于 COS 的文件经此跨端下载；桌面本地生成的文件无此字段） */
+  fileId?: string
 }
 
 export interface AgentSendResult {

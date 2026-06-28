@@ -136,6 +136,18 @@ const api = {
     save: (args: GeneratedFilePayload): Promise<SavedFileResult> =>
       ipcRenderer.invoke('file:save', args)
   },
+  // 对话云存储（与网页版同账号互通）
+  wsConv: {
+    list: (): Promise<{ ok: boolean; conversations: { id: string; title: string; updatedAt: number }[] }> =>
+      ipcRenderer.invoke('wsConv:list'),
+    get: (id: string): Promise<{ id: string; title: string; messages: unknown[] } | null> =>
+      ipcRenderer.invoke('wsConv:get', id),
+    save: (body: { id: string; title: string; messages: unknown[] }): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('wsConv:save', body),
+    del: (id: string): Promise<{ ok: boolean }> => ipcRenderer.invoke('wsConv:del', id),
+    download: (args: { convId: string; fileId: string; name: string }): Promise<{ ok: boolean; path?: string; canceled?: boolean; error?: string }> =>
+      ipcRenderer.invoke('wsConv:download', args)
+  },
   plugin: {
     /** 查询文档转换引擎（LibreOffice）是否已安装 */
     loStatus: (): Promise<LoStatus> => ipcRenderer.invoke('plugin:loStatus'),

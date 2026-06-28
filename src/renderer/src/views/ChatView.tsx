@@ -30,6 +30,45 @@ interface ChatMessage {
   files?: GeneratedFilePayload[]
 }
 
+// ChatMessage[] ↔ 云端归一化消息（与网页版同形：{role, text, files:[{fileId?,name}], uploads:[{name}]}），实现桌面↔网页对话互通。
+function toCloud(messages: ChatMessage[]): unknown[] {
+  return messages.map((m) => ({
+    role: m.role,
+    text: m.content,
+    files: m.files?.map((f) => ({ fileId: f.fileId, name: f.name })),
+    uploads: m.attachments?.map((n) => ({ name: n }))
+  }))
+}
+function fromCloud(arr: unknown[]): ChatMessage[] {
+  return (Array.isArray(arr) ? arr : []).map((raw) => {
+    const m = raw as { role?: string; text?: string; error?: string; uploads?: { name?: string }[]; files?: { fileId?: string; name?: string }[] }
+    return {
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: typeof m.text === 'string' ? m.text : m.error || '',
+      attachments: Array.isArray(m.uploads) ? m.uploads.map((u) => u?.name || '').filter(Boolean) : undefined,
+      files: Array.isArray(m.files) ? m.files.map((f) => ({ name: f?.name || '文件', base64: '', fileId: f?.fileId })) : undefined
+    }
+  })
+}
+async function mergedConvList(): Promise<ConvMeta[]> {
+  const local = await convList()
+  try {
+    const cloud = await window.api.wsConv.list()
+    if (cloud.ok) {
+      const map = new Map<string, ConvMeta>()
+      for (const c of local) map.set(c.id, c)
+      for (const c of cloud.conversations) {
+        const ex = map.get(c.id)
+        if (!ex || c.updatedAt > ex.updatedAt) map.set(c.id, c)
+      }
+      return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt)
+    }
+  } catch {
+    /* 云端不可用 → 仅本地 */
+  }
+  return local
+}
+
 const EXAMPLES = [
   '把这段聊天记录里的订单做成送货单（Excel）',
   '把总表里的“箱件汇总”单独抽成 Excel 发我',
@@ -87,15 +126,9 @@ export default function ChatView({
   // 启动：加载历史列表，并恢复最近一条对话
   useEffect(() => {
     void (async () => {
-      const list = await convList()
+      const list = await mergedConvList()
       setConvs(list)
-      if (list[0]) {
-        const full = await convLoad(list[0].id)
-        if (full && Array.isArray(full.messages) && full.messages.length) {
-          setMessages(full.messages as ChatMessage[])
-          setCid(full.id)
-        }
-      }
+      if (list[0]) await openConversation(list[0].id)
     })()
   }, [])
 
@@ -110,13 +143,15 @@ export default function ChatView({
     const slim = messages.map((m) => ({
       ...m,
       attachFiles: undefined,
-      files: m.files?.map((f) => ({ name: f.name, base64: '' }))
+      files: m.files?.map((f) => ({ name: f.name, base64: '', fileId: f.fileId }))
     }))
     void convSave({ id: cid, title, updatedAt: Date.now(), messages: slim }).then(refreshList)
+    // 完成一轮(非处理中)才推云端，避免频繁写：与网页版同账号互通
+    if (!busy) void window.api.wsConv.save({ id: cid, title, messages: toCloud(messages) })
   }, [messages])
 
   async function refreshList(): Promise<void> {
-    setConvs(await convList())
+    setConvs(await mergedConvList())
   }
   function newConversation(): void {
     setMessages([])
@@ -128,11 +163,23 @@ export default function ChatView({
     if (full) {
       setMessages((full.messages as ChatMessage[]) || [])
       setCid(id)
+    } else {
+      // 本地没有(网页版创建的会话) → 从云端取
+      try {
+        const cloud = await window.api.wsConv.get(id)
+        if (cloud && Array.isArray(cloud.messages)) {
+          setMessages(fromCloud(cloud.messages))
+          setCid(id)
+        }
+      } catch {
+        /* ignore */
+      }
     }
     setHistoryOpen(false)
   }
   async function deleteConversation(id: string): Promise<void> {
     await convDel(id)
+    void window.api.wsConv.del(id) // 同步删云端
     void window.api.agent.dropConv(id) // 释放主进程里该会话的文件缓存
     await refreshList()
     if (id === cid) newConversation()
@@ -196,7 +243,14 @@ export default function ChatView({
   }
 
   async function saveFile(f: GeneratedFilePayload): Promise<void> {
-    // 历史会话恢复后，生成文件的 base64 已在持久化时清空（避免库膨胀）；此时无法直接下载。
+    // 网页版生成、存于 COS 的文件（有 fileId、无本地 base64）→ 经服务端下载到本地。
+    if (!f.base64 && f.fileId) {
+      const dr = await window.api.wsConv.download({ convId: cid, fileId: f.fileId, name: f.name })
+      if (dr.ok) toast.ok(`已保存：${dr.path}`)
+      else if (!dr.canceled) toast.err(dr.error || '下载失败')
+      return
+    }
+    // 桌面历史会话恢复后，本地生成文件的 base64 已清空（避免库膨胀）；此时无法直接下载。
     if (!f.base64) {
       toast.info('这是历史对话里生成过的文件，内容未保留。让我「重新生成一下刚才那个文件」即可下载。')
       return
@@ -563,7 +617,7 @@ function Bubble({
         {msg.files && msg.files.length > 0 && (
           <div className="mt-2 space-y-1.5">
             {msg.files.map((f, i) => {
-              const expired = !f.base64
+              const expired = !f.base64 && !f.fileId
               return (
                 <div
                   key={i}
@@ -584,7 +638,7 @@ function Bubble({
                   >
                     保存
                   </button>
-                  {!expired && (
+                  {!!f.base64 && (
                     <button
                       onClick={() => onRememberFile(f)}
                       title="存入记忆"

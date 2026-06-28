@@ -389,6 +389,46 @@ export function registerIpc(): void {
     return { ok: true }
   })
 
+  // —— 对话云存储（与网页版同账号互通：/api/ws/conversations）——
+  ipcMain.handle('wsConv:list', async () => {
+    if (!account.isLoggedIn()) return { ok: false, conversations: [] }
+    const r = await account.apiFetch('/api/ws/conversations')
+    return { ok: r.ok, conversations: r.ok ? r.data?.conversations || [] : [] }
+  })
+  ipcMain.handle('wsConv:get', async (_e, id: string) => {
+    if (!account.isLoggedIn()) return null
+    const r = await account.apiFetch('/api/ws/conversations?id=' + encodeURIComponent(id))
+    return r.ok ? r.data : null
+  })
+  ipcMain.handle('wsConv:save', async (_e, body: { id: string; title: string; messages: unknown[] }) => {
+    if (!account.isLoggedIn()) return { ok: false }
+    const r = await account.apiFetch('/api/ws/conversations', { method: 'POST', body: JSON.stringify(body) })
+    return { ok: r.ok }
+  })
+  ipcMain.handle('wsConv:del', async (_e, id: string) => {
+    if (!account.isLoggedIn()) return { ok: false }
+    const r = await account.apiFetch('/api/ws/conversations?id=' + encodeURIComponent(id), { method: 'DELETE' })
+    return { ok: r.ok }
+  })
+  // 下载网页版生成、存于 COS 的文件（有 fileId）到本地
+  ipcMain.handle('wsConv:download', async (_e, args: { convId: string; fileId: string; name: string }) => {
+    if (!account.isLoggedIn()) return { ok: false, error: '请先登录' }
+    try {
+      const tok = account.getToken()
+      const res = await fetch(`${account.API_BASE}/api/ws/agent/file?conv=${encodeURIComponent(args.convId)}&id=${encodeURIComponent(args.fileId)}`, {
+        headers: tok ? { authorization: `Bearer ${tok}` } : {}
+      })
+      if (!res.ok) return { ok: false, error: `下载失败(${res.status})` }
+      const buf = Buffer.from(await res.arrayBuffer())
+      const { canceled, filePath } = await dialog.showSaveDialog({ defaultPath: args.name })
+      if (canceled || !filePath) return { ok: false, canceled: true }
+      await writeFile(filePath, buf)
+      return { ok: true, path: filePath }
+    } catch (err: any) {
+      return { ok: false, error: String(err?.message ?? err) }
+    }
+  })
+
   // 保存生成的文件（base64）到用户选择的位置
   ipcMain.handle(
     'file:save',
